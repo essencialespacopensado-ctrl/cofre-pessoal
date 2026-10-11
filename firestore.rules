@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function isDev() {
+      return signed() && request.auth.token.email_verified == true
+        && request.auth.token.email in ['essencialespacopensado@gmail.com'];
+    }
+    function me(uid) { return signed() && request.auth.uid == uid; }
+    function blocked(uid) {
+      return exists(/databases/$(database)/documents/access/$(uid))
+        && get(/databases/$(database)/documents/access/$(uid)).data.status != 'ok';
+    }
+    // finanças: só a própria pessoa; o desenvolvedor só pode apagar (Excluir usuário)
+    match /data/users/{uid}/{doc=**} {
+      allow read, write: if me(uid) && !blocked(uid);
+      allow delete: if isDev();
+    }
+    // sugestões: a pessoa escreve as suas; o desenvolvedor lê e responde todas
+    match /ideas/{uid} {
+      allow read: if me(uid) || isDev();
+      allow write: if (me(uid) && !blocked(uid)) || isDev();
+    }
+    // lista de usuários (nome, e-mail, datas)
+    match /members/{uid} {
+      allow read: if me(uid) || isDev();
+      allow write: if me(uid) || isDev();
+    }
+    // pausar / excluir: só o desenvolvedor muda
+    match /access/{uid} {
+      allow read: if me(uid) || isDev();
+      allow write: if isDev();
+    }
+  }
+}
