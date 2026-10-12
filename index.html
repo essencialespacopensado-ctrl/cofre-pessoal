@@ -439,7 +439,8 @@ function resetSession(){
 }
 async function boot(){
  render();
- const cfg=window.FIREBASE_CONFIG;
+ let cfg=window.FIREBASE_CONFIG;
+ if(!cfg||!cfg.apiKey){try{cfg=(typeof firebaseConfig!=='undefined')?firebaseConfig:null}catch(e){cfg=null}}
  if(!window.firebase||!cfg||!cfg.apiKey){
   LOCAL_ONLY=true;
   try{const l=localStorage.getItem(lsKey());if(l){const p=JSON.parse(l);if(p&&p.v)S=p}}catch(e){}
