@@ -403,13 +403,25 @@ function receipts(m){
  out.forEach(r=>{const d=diffM(m,CUR);r.auto=d>0||(d===0&&r.day<=td);r.got=g[r.key]!=null?!!g[r.key]:r.auto});
  return out.sort((a,b)=>a.day-b.day);
 }
-function pendingIn(m){return receipts(m).filter(r=>!r.got).reduce((a,r)=>a+r.val,0)}
-function pendingOut(m){return bills(m).filter(b=>!b.paid).reduce((a,b)=>a+b.val,0)} // contas/faturas do mês ainda não pagas
+function iniDay(m){const i=S.initial;return i&&i.month===m?num(i.day):0} // itens até esse dia já estão dentro do saldo informado
+function outItems(m){ // tudo que sai do caixa no mês m, item a item (bate com month().saidas)
+ const L=bills(m).map(b=>({name:b.name,kind:b.kind,day:b.day,val:b.val,done:!!b.paid}));
+ S.tx.filter(t=>t.type==='out'&&t.date&&!cardById(t.cardId)&&t.date.slice(0,7)===m).forEach(t=>L.push({name:t.desc,kind:'Gasto lançado',day:+t.date.slice(8,10)||1,val:num(t.val),done:true}));
+ extraOut(m).forEach(r=>L.push({name:r.name,kind:r.kind,day:r.day,val:r.val,done:diffM(m,CUR)>0||(m===CUR&&r.day<=TODAY.getDate())}));
+ return L;
+}
+function pendingIn(m){const d=iniDay(m);return receipts(m).filter(r=>!r.got&&r.day>d).reduce((a,r)=>a+r.val,0)}
+function pendingOut(m){const d=iniDay(m);return bills(m).filter(b=>!b.paid&&b.day>d).reduce((a,b)=>a+b.val,0)} // contas/faturas do mês ainda não pagas
 function varRestOf(){return Math.max(0,avgVarOut()-month(CUR).outDia)}
 function balanceAt(m){
  const ini=S.initial;if(!ini||!ini.month)return null;
  if(diffM(ini.month,m)<0)return num(ini.val);
- let b=num(ini.val);for(let k=ini.month;diffM(k,m)>=0;k=addM(k,1))b+=month(k).saldo-(diffM(k,CUR)===0?pendingIn(k)-pendingOut(k):0);return b; // mês atual: só o que já entrou e já foi pago
+ let b=num(ini.val);for(let k=ini.month;diffM(k,m)>=0;k=addM(k,1)){const d=iniDay(k),cur=k===CUR;
+  if(!d&&!cur){b+=month(k).saldo;continue}
+  receipts(k).forEach(r=>{if(r.day>d&&(!cur||r.got))b+=r.val});
+  outItems(k).forEach(o=>{if(o.day>d&&(!cur||o.done))b-=o.val});
+ }
+ return b; // mês do saldo informado: só o que veio depois daquele dia; mês atual: só o que já entrou e já foi pago
 }
 
 /* ===== Trabalho: CLT pela lei (2026) e acordos de serviço ===== */
@@ -611,9 +623,10 @@ function explainBalance(){
  const ini=S.initial;if(!ini||!ini.month)return '<p>Você ainda não informou o <b>saldo inicial</b>. Sem ele, o app não sabe quanto você tem em conta. Vá no Painel → <b>Informar saldo inicial</b>.</p>';
  const L=[['Saldo inicial em '+mLabel(ini.month,true),num(ini.val),'o valor que você informou']];
  for(let k=ini.month;diffM(k,CUR)>0;k=addM(k,1)){const x=month(k);L.push(['Resultado de '+mLabel(k,true),x.saldo,'entrou '+R0(x.entradas)+' − saiu '+R0(x.saidas),x.saldo>=0?'pos':'neg'])}
- const x=month(CUR),pi=pendingIn(CUR),po=pendingOut(CUR);
- L.push(['Já entrou em '+mLabel(CUR,true),x.entradas-pi,'entradas do mês até hoje','pos']);
- L.push(['Já saiu em '+mLabel(CUR,true),-(x.saidas-po),'contas pagas + gastos lançados que já saíram do caixa','neg']);
+ const pi=pendingIn(CUR),po=pendingOut(CUR),d0=iniDay(CUR);
+ if(ini.month===CUR)L[0]=['Saldo que você informou em '+(d0?String(d0).padStart(2,'0')+'/'+CUR.slice(5,7):'início de '+mLabel(CUR)),num(ini.val),'tudo até esse dia já está dentro dele'];
+ receipts(CUR).filter(r=>r.got&&r.day>d0).forEach(r=>L.push(['+ '+esc(r.name),r.val,r.kind+' · dia '+String(r.day).padStart(2,'0')+(r.auto&&!(S.got||{})[r.key]?' · <b>contado como recebido porque o dia já passou</b> — se não caiu, toque em "Não caiu" em A pagar':' · recebido'),'pos']));
+ outItems(CUR).filter(o=>o.done&&o.day>d0).forEach(o=>L.push(['− '+esc(o.name),-o.val,o.kind+' · dia '+String(o.day).padStart(2,'0')+' · pago','neg']));
  return expGroup('Como chegamos no saldo em conta',L)+'<div class="xhd" style="margin-top:6px"><b>Saldo em conta agora</b><b class="mono">'+R(balanceAt(CUR))+'</b></div><p class="muted" style="font-size:12.5px">Ainda falta receber '+R(pi)+' e pagar '+R(po)+' neste mês — isso aparece em <b>A pagar</b>. Marque <b>Paguei</b> quando pagar para o saldo ficar igual ao do banco.</p>';
 }
 function explainRange(to,sc){
@@ -906,8 +919,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.23';
+const APP_VERSION='2.24';
 const CHANGELOG=[
+ ['2.24','12/10/2026',['Saldo em conta: agora você informa o saldo de HOJE (com a data). O que entrou/saiu até essa data não é somado de novo — evita contar o salário duas vezes.','Toque no saldo para ver cada entrada e saída que foi contada no mês, e quais entraram automaticamente porque o dia já passou.']],
  ['2.23','12/10/2026',['Trabalho: 👥 Pessoas da família — adicionar, renomear e excluir pessoas; escolher a pessoa numa lista ao cadastrar a renda.']],
  ['2.22','12/10/2026',['Aba Trabalho agora reúne as rendas da família: cada pessoa com seus trabalhos (salário fixo ou acordo informal) e o total da família no topo.','Salários que estavam em Fixas foram movidos para Trabalho (sem duplicar com o acordo).']],
  ['2.21','12/10/2026',['Evita duplicados: ao salvar algo parecido com um cadastro existente (mesmo valor ou nome), o app pergunta se é o mesmo.','Salário em Fixas + acordo informal com o mesmo valor: escolha "é o mesmo" e o acordo fica só para projeção (13º, férias, bônus).','Painel avisa duplicidades que já existem, com botão Resolver.']],
@@ -1168,7 +1182,7 @@ function vPainel(){
  '<div class="grid g32" style="margin-top:16px">'+
   '<section class="card hero"><div class="hero-row"><div style="min-width:0">'+(bal!=null?
    '<div class="kpi"><div class="lb" style="display:flex;align-items:center;gap:8px"><span class="xclick" data-x="bal">Saldo em conta ⓘ</span> <button class="btn sm ghost" data-act="eye" style="padding:2px 8px" aria-label="'+(HIDE?'Mostrar valores':'Esconder valores')+'">'+(HIDE?'🙈':'👁️')+'</button></div></div><div class="big '+(bal>=0?'':'neg')+'">'+R(bal)+'</div>'+
-   '<div class="muted" style="margin-top:6px;font-size:14px">Resultado de '+mLabel(CUR)+' até hoje: <b class="mono '+(x.saldo-pend+pOut>=0?'pos':'neg')+'">'+(x.saldo-pend+pOut>=0?'+':'')+R(x.saldo-pend+pOut)+'</b> · Saldo inicial '+R0(S.initial.val)+' em '+mLabel(S.initial.month)+' <button class="btn sm ghost" data-act="editInit" style="padding:2px 8px">Editar</button></div>'
+   '<div class="muted" style="margin-top:6px;font-size:14px">Resultado de '+mLabel(CUR)+' até hoje: <b class="mono '+(x.saldo-pend+pOut>=0?'pos':'neg')+'">'+(x.saldo-pend+pOut>=0?'+':'')+R(x.saldo-pend+pOut)+'</b> · Saldo informado '+R0(S.initial.val)+' em '+(S.initial.day?String(S.initial.day).padStart(2,'0')+'/':'início de ')+mLabel(S.initial.month)+' <button class="btn sm ghost" data-act="editInit" style="padding:2px 8px">Editar</button></div>'
    :'<div class="kpi"><div class="lb">Resultado do mês</div></div><div class="big '+(x.saldo>=0?'':'neg')+'">'+R(x.saldo)+'</div>'+
    '<div style="margin-top:8px"><button class="btn sm" data-act="editInit">Informar saldo inicial</button></div>')+
    '<div class="muted" style="margin-top:6px;font-size:14px">Entrou <b class="pos mono">'+R(x.entradas-pend)+'</b>'+(pend>0?' · A receber <b class="mono" style="color:var(--accent)">'+R(pend)+'</b> <span style="font-size:12px">(previsto)</span>':'')+' · Saiu <b class="neg mono">'+R(x.saidas-pOut)+'</b>'+(pOut>0?' · A pagar <b class="mono" style="color:var(--warn)">'+R(pOut)+'</b>':'')+'</div>'+
@@ -2332,13 +2346,13 @@ function formCard(c){
   upsert('cards',{id:c.id||uid(),name:f.name.value.trim(),close:d(f.close.value),due:d(f.due.value)});commit('Cartão salvo');});
 }
 function formInit(){
- const i=S.initial||{val:'',month:CUR};
- openSheet('Saldo inicial','<div class="form">'+
-  '<label class="f">Valor em conta (R$)<input name="val" type="number" inputmode="decimal" step="0.01" value="'+(i.val===''?'':i.val)+'" placeholder="Ex.: 2500"></label>'+
-  '<label class="f">No início de qual mês<input name="month" type="month" value="'+i.month+'"></label>'+
-  '<p class="muted full" style="margin:0;font-size:12.5px">Some o que você tem em todas as contas e na carteira. Pode ser negativo se a conta estiver no cheque especial. A partir desse mês, o app soma entradas e tira saídas para mostrar o saldo atual.</p></div>',f=>{
+ const i=S.initial||{val:'',month:CUR,day:TODAY.getDate()};const dt=i.month+'-'+String(i.day?Math.min(28,num(i.day))||1:1).padStart(2,'0');
+ openSheet('Saldo em conta','<div class="form">'+
+  '<label class="f">Quanto tem na conta (R$)<input name="val" type="number" inputmode="decimal" step="0.01" value="'+(i.val===''?'':i.val)+'" placeholder="Ex.: 2500"></label>'+
+  '<label class="f">Esse era o saldo no dia<input name="date" type="date" value="'+(S.initial?(i.day?i.month+'-'+String(i.day).padStart(2,'0'):i.month+'-01'):todayISO())+'"></label>'+
+  '<p class="muted full" style="margin:0;font-size:12.5px">Olhe o saldo no banco <b>hoje</b> (some todas as contas e a carteira) e deixe a data de hoje. Tudo o que entrou ou saiu <b>até esse dia</b> já está dentro desse valor — o app só soma e tira o que vier <b>depois</b>. Pode ser negativo se estiver no cheque especial.</p></div>',f=>{
   if(f.val.value===''){f.val.focus();toast('Preencha o valor');return false}
-  S.initial={val:num(f.val.value),month:f.month.value||CUR};S.demo=false;commit('Saldo inicial salvo');});
+  const d=f.date.value||todayISO();S.initial={val:num(f.val.value),month:d.slice(0,7),day:+d.slice(8,10)};S.demo=false;commit('Saldo salvo');});
 }
 function formGoal(g){
  g=g||{name:'',target:'',saved:0,mode:'auto',monthly:300,rate:0.8};
