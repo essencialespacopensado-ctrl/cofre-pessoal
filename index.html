@@ -378,7 +378,7 @@ function balanceAt(m){
 function balanceProj(n){ // saldo previsto daqui a n meses
  const b=balanceAt(CUR);if(b==null)return null;let s=b;for(let k=1;k<=n;k++)s+=projSobra(addM(CUR,k));return s;
 }
-function blank(){return {v:1,demo:false,tx:[],rec:[],inst:[],goals:[],ideas:[],budget:{},cards:[],paid:{}}}
+function blank(){return {v:1,demo:false,tx:[],rec:[],inst:[],instIn:[],goals:[],ideas:[],budget:{},cards:[],paid:{}}}
 function demoCards(s){ // adiciona cartões de exemplo e liga algumas compras a eles
  const c1={id:uid(),name:'Nubank',close:3,due:10},c2={id:uid(),name:'Itaú Visa',close:20,due:28};
  s.cards=[c1,c2];s.paid={};
@@ -442,8 +442,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.0';
+const APP_VERSION='2.1';
 const CHANGELOG=[
+ ['2.1','11/10/2026',['Entradas parceladas: cadastre dinheiro que vai receber em parcelas (aba Parcelados). Cada parcela entra sozinha na renda do mês, na previsão e no dízimo.']],
  ['2.0','11/10/2026',['Assistente "Pergunte qualquer coisa": leva até a tela certa e abre o formulário, responde com os seus números (saldo, gastos, parcelas, dízimo, vencimentos, metas) e pesquisa na internet.']],
  ['1.9','11/10/2026',['Categorias editáveis: criar, renomear, apagar e mudar explicação e % de todas as categorias de gastos e entradas (botão ⚙️ Categorias em Orçamento, Fixas e Lançamentos).']],
  ['1.8','11/10/2026',['Correção: a tela do Desenvolvedor agora reconhece a confirmação de e-mail na hora e mostra todos os usuários cadastrados.']],
@@ -574,16 +575,20 @@ function instStatus(i){
  const paid=Math.max(0,Math.min(i.n,k+1)); // parcela do mês atual conta como deste mês
  const rem=i.n-paid; return {p,paid,rem,remVal:rem*p,end:addM(i.first,i.n-1),totalPaid:p*i.n,juros:p*i.n-i.total,curK:k};
 }
+function inInMonth(i,m){const k=diffM(i.first,m);return k>=0&&k<i.n}
+function inParcel(i){return num(i.total)/Math.max(1,i.n)}
+function inStatus(i){const p=inParcel(i),k=diffM(i.first,CUR),got=Math.max(0,Math.min(i.n,k+1)),rem=i.n-got;return {p,got,rem,remVal:rem*p,end:addM(i.first,i.n-1),curK:k}}
 function recActive(r,m){return !r.start||diffM(r.start,m)>=0}
 function month(m){
- const inFix=S.rec.filter(r=>r.type==='in'&&recActive(r,m)).reduce((a,r)=>a+num(r.val),0);
+ const inParc=(S.instIn||[]).filter(i=>inInMonth(i,m)).reduce((a,i)=>a+inParcel(i),0);
+ const inFix=S.rec.filter(r=>r.type==='in'&&recActive(r,m)).reduce((a,r)=>a+num(r.val),0)+inParc;
  const outFix=S.rec.filter(r=>r.type==='out'&&recActive(r,m)).reduce((a,r)=>a+num(r.val),0);
  const parc=S.inst.filter(i=>instInMonth(i,m)).reduce((a,i)=>a+instParcel(i),0);
  const txs=S.tx.filter(t=>t.date&&t.date.slice(0,7)===m);
  const inVar=txs.filter(t=>t.type==='in').reduce((a,t)=>a+num(t.val),0);
  const outVar=txs.filter(t=>t.type==='out').reduce((a,t)=>a+num(t.val),0);
  const entradas=inFix+inVar, saidas=outFix+parc+outVar;
- return {m,inFix,outFix,parc,inVar,outVar,entradas,saidas,saldo:entradas-saidas};
+ return {m,inFix,inParc,outFix,parc,inVar,outVar,entradas,saidas,saldo:entradas-saidas};
 }
 function avgVarOut(){
  const ms=[0,-1,-2].map(k=>addM(CUR,k)).map(month).filter(x=>x.outVar>0);
@@ -618,7 +623,7 @@ function buildNav(){
  setSync(syncState);
 }
 function render(){
- S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};
+ S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];
  const main=document.getElementById('main');
  document.body.classList.toggle('locked',locked||(ACCESS!=='ok'&&!ME.owner));
  if(ACCESS!=='ok'&&!ME.owner){main.innerHTML=vBlocked();return}
@@ -906,6 +911,7 @@ const AS_ACTIONS={
  fixa:()=>goView('fixas',()=>formRec()),
  cartao:()=>goView('pagar',()=>formCard()),
  parcela:()=>goView('parc',()=>formInst()),
+ inParc:()=>goView('parc',()=>formInIn()),
  meta:()=>goView('metas',()=>formGoal()),
  saldoIni:()=>goView('fixas',()=>formInit()),
  oferta:()=>{dizTab='calc';goView('diz',()=>formOffer())},
@@ -920,6 +926,7 @@ const AS_ACTIONS={
 };
 // [palavras-chave, resposta, botões [rótulo, ação|view]]
 const AS_KB=[
+ [['entrada parcelada','entradas parceladas','parcelada','entrada','receber parcelado','recebo parcelado','receber em parcelas','vou receber','vendi parcelado','venda parcelada','me pagar parcelado','me devolver'],'Dinheiro que você vai <b>receber em parcelas</b> fica em <b>Parcelados → Entradas parceladas</b>. Abri o formulário: informe o valor total, nº de parcelas e o mês da 1ª.',[['Nova entrada parcelada','inParc']]],
  [['lancar gasto','gastei','gasto','despesa','comprei','compra','paguei','anotar gasto','registrar gasto'],'Gastos do dia a dia ficam em <b>Lançamentos</b>. Já abri o formulário: escolha <b>Gasto</b>, descrição, valor e categoria. Se foi no cartão de crédito, escolha o cartão e o valor vai para a fatura certa.',[['Novo gasto','gasto']]],
  [['recebi','entrada','receita','ganhei','renda extra','lancar entrada','pix recebido'],'Entradas avulsas ficam em <b>Lançamentos</b>. Abri o formulário já como <b>Entrada</b>.',[['Nova entrada','entrada']]],
  [['salario','conta fixa','fixa','fixas','recorrente','aluguel','luz','agua','energia','internet','celular','todo mes','mensalidade','assinatura','renda da familia','esposa','marido'],'O que se repete todo mês fica em <b>Fixas</b>: salário, renda da família, aluguel, luz, internet… Abri o formulário de nova recorrente.',[['Nova recorrente','fixa'],['Ver Fixas','v:fixas']]],
@@ -1010,12 +1017,14 @@ function catUse(name,type){
  let n=0;S.tx.forEach(t=>{if(t.cat===name&&(type==='in'?t.type==='in':t.type==='out'))n++});
  S.rec.forEach(r=>{if(r.cat===name&&(type==='in'?r.type==='in':r.type==='out'))n++});
  if(type==='out')S.inst.forEach(i=>{if(i.cat===name)n++});
+ else (S.instIn||[]).forEach(i=>{if(i.cat===name)n++});
  return n;
 }
 function renameCatEverywhere(type,from,to){
  const isT=x=>type==='in'?x.type==='in':x.type==='out';
  S.tx.forEach(t=>{if(t.cat===from&&isT(t))t.cat=to});
  S.rec.forEach(r=>{if(r.cat===from&&isT(r))r.cat=to});
+ if(type==='in')(S.instIn||[]).forEach(i=>{if(i.cat===from)i.cat=to});
  if(type==='out'){S.inst.forEach(i=>{if(i.cat===from)i.cat=to});if(S.budget&&S.budget[from]!=null){S.budget[to]=S.budget[from];delete S.budget[from]}}
 }
 function vCats(){
@@ -1072,6 +1081,7 @@ function tithe(){S.tithe=S.tithe||{offer:5};const T=S.tithe;T.rows=T.rows||{};T.
 function titheRows(m){
  const T=tithe(),ov=T.rows[m]||{},pr=T.pr[m]||{};const src=[];
  S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>src.push({key:'rec-'+r.id,desc:r.desc,cat:r.cat,val:num(r.val),fixa:true}));
+ (S.instIn||[]).filter(i=>inInMonth(i,m)).forEach(i=>src.push({key:'ini-'+i.id,desc:i.desc+' ('+(diffM(i.first,m)+1)+'/'+i.n+')',cat:i.cat,val:inParcel(i),fixa:true}));
  S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m).forEach(t=>src.push({key:'tx-'+t.id,desc:t.desc,cat:t.cat,val:num(t.val),fixa:false}));
  return src.map(s=>{const o=ov[s.key]||{};
   const dAuto=s.val*0.10,oAuto=s.val*num(T.offer)/100;
@@ -1311,10 +1321,19 @@ function vParc(){
   '<div class="bar"><i style="width:'+(pct*100)+'%"></i></div>'+
   '<div class="stats"><div><div class="lb">Falta pagar</div><div class="vl">'+R(s.remVal)+'</div></div><div><div class="lb">Quita em</div><div class="vl">'+mLabel(s.end)+'</div></div><div><div class="lb">'+(s.juros>0.5?'Juros total':'Valor total')+'</div><div class="vl '+(s.juros>0.5?'wrn':'')+'">'+R(s.juros>0.5?s.juros:s.totalPaid)+'</div></div></div>'+
   '<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editInst" data-id="'+i.id+'">Editar</button>'+delBtn('inst',i.id)+'</div></section>'};
- return top('Compras parceladas','Parcelas e quitação','<button class="btn primary" data-act="addInst">'+icon('parc')+'Nova compra parcelada</button>')+
+ const ins=S.instIn||[],insAct=ins.filter(i=>inStatus(i).rem>0),insDone=ins.filter(i=>inStatus(i).rem<=0);
+ const icard=i=>{const s=inStatus(i);return '<section class="card pcard"><div class="top"><div style="min-width:0"><div class="nm">'+esc(i.desc)+'</div><div class="muted" style="font-size:13px">'+esc(i.cat||'')+' · '+i.n+'x de '+R(s.p)+(i.from?' · de '+esc(i.from):'')+'</div></div>'+(s.rem>0?'<span class="chip good">'+s.rem+' a receber</span>':'<span class="chip good">Recebido</span>')+'</div>'+
+  '<div class="ticks">'+Array.from({length:i.n},(_,k)=>'<i class="'+(k<s.got-1||(k===s.got-1&&k!==s.curK)?'on':k===s.curK?'now':'')+'"></i>').join('')+'</div>'+
+  '<div class="bar"><i style="width:'+(s.got/i.n*100)+'%"></i></div>'+
+  '<div class="stats"><div><div class="lb">Falta receber</div><div class="vl pos">'+R(s.remVal)+'</div></div><div><div class="lb">Última em</div><div class="vl">'+mLabel(s.end)+'</div></div><div><div class="lb">Valor total</div><div class="vl">'+R(i.total)+'</div></div></div>'+
+  '<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editInIn" data-id="'+i.id+'">Editar</button>'+delBtn('instIn',i.id)+'</div></section>'};
+ const inSec='<h2 style="margin:28px 0 12px">💰 Entradas parceladas</h2><p class="muted" style="margin:-6px 0 12px;font-size:13px">Dinheiro que você vai receber em parcelas (venda parcelada, acordo, empréstimo que te devolvem). Cada parcela entra sozinha na renda do mês e no dízimo.</p>'+
+  (insAct.length?'<div class="grid g2">'+insAct.map(icard).join('')+'</div>':'<section class="card"><div class="empty">Nenhuma entrada parcelada. Toque em <b>+ Entrada parcelada</b> para cadastrar.</div></section>')+
+  (insDone.length?'<h3 style="margin:20px 0 10px" class="muted">Já recebidas</h3><div class="grid g2">'+insDone.map(icard).join('')+'</div>':'');
+ return top('Parcelados','Compras e entradas parceladas','<button class="btn primary" data-act="addInst">'+icon('parc')+'Nova compra parcelada</button><button class="btn" data-act="addInIn">+ Entrada parcelada</button>')+
  '<div class="grid g4" style="margin-bottom:16px">'+kpi('Parcelas este mês',R(totMes),act.length+' compra'+(act.length===1?'':'s')+' ativa'+(act.length===1?'':'s'),'')+kpi('Total que falta',R(totRem),'somando todas as parcelas','neg')+kpi('Livre de parcelas',df?mLabel(df,true):'Já está!',df?'daqui a '+dur(diffM(CUR,df)+1):'nenhuma parcela ativa','pos')+kpi('Juros pagos',R(S.inst.reduce((a,i)=>a+Math.max(0,instStatus(i).juros),0)),'custo extra das compras','wrn')+'</div>'+
  (act.length?'<div class="grid g2">'+act.map(card).join('')+'</div>':'<section class="card"><div class="empty">Nenhuma compra parcelada ativa. Cadastre uma para saber quando quita.</div></section>')+
- (done.length?'<h2 style="margin:24px 0 12px" class="muted">Já quitadas</h2><div class="grid g2">'+done.map(card).join('')+'</div>':'');
+ (done.length?'<h2 style="margin:24px 0 12px" class="muted">Já quitadas</h2><div class="grid g2">'+done.map(card).join('')+'</div>':'')+inSec;
 }
 
 /* Metas */
@@ -1487,6 +1506,24 @@ function formInst(i){
  const prev=()=>{const n=Math.max(1,Math.round(num(f.n.value)));const p=parcelaPrice(num(f.total.value),n,num(f.rate.value));document.getElementById('instPrev').innerHTML=num(f.total.value)?'Parcela: <b class="mono">'+R(p)+'</b> · total <b class="mono">'+R(p*n)+'</b> · última em <b>'+mLabel(addM(f.first.value||CUR,n-1),true)+'</b>':'Informe o valor para ver a parcela.'};
  f.addEventListener('input',prev);prev();
 }
+function formInIn(i){
+ i=i||{desc:'',cat:CAT_IN[0]||'Outros',total:'',n:3,first:CUR,day:10,from:''};
+ openSheet(i.id?'Editar entrada parcelada':'Nova entrada parcelada','<div class="form">'+
+  '<label class="f full">O que vai receber<input name="desc" value="'+esc(i.desc)+'" placeholder="Ex.: Venda do carro, Acordo trabalhista"></label>'+
+  '<label class="f">Valor total (R$)<input name="total" type="number" inputmode="decimal" min="0" step="0.01" value="'+(i.total||'')+'"></label>'+
+  '<label class="f">Nº de parcelas<input name="n" type="number" inputmode="numeric" min="1" max="480" value="'+i.n+'"></label>'+
+  '<label class="f">1ª parcela em<input name="first" type="month" value="'+i.first+'"></label>'+
+  '<label class="f">Dia que cai<input name="day" type="number" inputmode="numeric" min="1" max="31" value="'+(i.day||10)+'"></label>'+
+  '<label class="f">Categoria<select name="cat">'+opts(CAT_IN,i.cat)+'</select></label>'+
+  '<label class="f">Quem paga (opcional)<input name="from" value="'+esc(i.from||'')+'" placeholder="Ex.: João, Empresa X"></label>'+
+  '<p class="muted full" id="inPrev" style="margin:0;font-size:13px"></p></div>',f=>{
+  if(!need(f,['desc','total','n']))return false;
+  S.instIn=S.instIn||[];
+  upsert('instIn',{id:i.id||uid(),desc:f.desc.value.trim(),total:num(f.total.value),n:Math.max(1,Math.round(num(f.n.value))),first:f.first.value||CUR,day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||10))),cat:f.cat.value,from:f.from.value.trim()});commit('Entrada parcelada salva');});
+ const f=document.getElementById('sheetForm');
+ const prev=()=>{const n=Math.max(1,Math.round(num(f.n.value)));const t=num(f.total.value);document.getElementById('inPrev').innerHTML=t?'Parcela: <b class="mono">'+R(t/n)+'</b> por mês · última em <b>'+mLabel(addM(f.first.value||CUR,n-1),true)+'</b>':'Informe o valor para ver a parcela.'};
+ f.addEventListener('input',prev);prev();
+}
 function cardField(sel,label){
  const cs=S.cards||[];
  return '<label class="f">'+(label||'Cartão de crédito')+'<select name="card"><option value="">'+(cs.length?'Nenhum (não é no cartão)':'Nenhum cartão cadastrado')+'</option>'+cs.map(c=>'<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+esc(c.name)+' · vence dia '+c.due+'</option>').join('')+'</select></label>';
@@ -1546,6 +1583,8 @@ document.addEventListener('click',e=>{
  else if(a==='editRec')formRec({...find('rec',id)});
  else if(a==='addInst')formInst();
  else if(a==='editInst')formInst({...find('inst',id)});
+ else if(a==='addInIn')formInIn();
+ else if(a==='editInIn')formInIn({...find('instIn',id)});
  else if(a==='addGoal')formGoal();
  else if(a==='editGoal')formGoal({...find('goals',id)});
  else if(a==='depGoal')formDep(find('goals',id));
@@ -1601,7 +1640,7 @@ document.addEventListener('click',e=>{
  else if(a==='mPrev'){lancMonth=addM(lancMonth,-1);render()}
  else if(a==='mNext'){lancMonth=addM(lancMonth,1);render()}
  else if(a==='clearDemo'){if(delArm!==b){delArm=b;b.textContent='Tem certeza? Toque de novo';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Apagar exemplos e começar'}},3500);return}S=blank();delArm=null;commit('Pronto! Comece cadastrando sua renda em Fixas.');view='fixas';render()}
- else if(a==='del'){if(delArm!==b){delArm=b;b.textContent='Confirmar';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Excluir'}},3000);return}delArm=null;if(b.dataset.col==='ideas'){saveIdeas(getIdeas().filter(x=>x.id!==id));toast('Excluído');return}S.demo=false;S[b.dataset.col]=S[b.dataset.col].filter(x=>x.id!==id);commit('Excluído')}
+ else if(a==='del'){if(!S[b.dataset.col]&&b.dataset.col!=='ideas')S[b.dataset.col]=[];if(delArm!==b){delArm=b;b.textContent='Confirmar';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Excluir'}},3000);return}delArm=null;if(b.dataset.col==='ideas'){saveIdeas(getIdeas().filter(x=>x.id!==id));toast('Excluído');return}S.demo=false;S[b.dataset.col]=S[b.dataset.col].filter(x=>x.id!==id);commit('Excluído')}
  else if(a==='simToInst'){const g=k=>num(document.getElementById(k).value);formInst({desc:document.getElementById('sDesc').value,cat:'Transporte',total:Math.max(0,g('sPrice')-g('sDown')),n:Math.max(1,Math.round(g('sN'))),rate:g('sRate'),first:addM(CUR,1),day:10,pay:'Boleto'})}
 });
 document.addEventListener('input',e=>{
