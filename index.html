@@ -271,6 +271,7 @@ svg text{font-family:var(--f-mono)}
 .xbox{max-width:640px}.xsum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 12px}.xsum div{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px}.xsum small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.1em}.xsum b{font-size:18px}
 .xgrp{border-top:1px solid var(--line);padding:10px 0}.xhd{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}.xrow{display:flex;justify-content:space-between;gap:12px;padding:5px 0 5px 10px;font-size:13.5px;border-left:2px solid var(--line)}.xrow small{display:block;color:var(--muted);font-size:12px}.xrow b{white-space:nowrap}.pos{color:var(--good)}.neg{color:var(--bad)}
 .backbtn{margin:0 0 8px -6px;padding:4px 10px;font-size:13px}
+.dupask{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:16px}.dupbox{background:var(--panel);border:1px solid var(--warn);border-radius:16px;padding:20px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)}.dupbtns{display:flex;flex-direction:column;gap:8px}.dupbtns .btn{justify-content:center;text-align:center;white-space:normal}
 </style>
 </head>
 <body>
@@ -630,6 +631,62 @@ function openExplain(kind,m){
  el.innerHTML='<div class="sheet" role="dialog" aria-modal="true" aria-label="'+esc(t)+'"><div class="box xbox"><div class="hd"><h2>'+esc(t)+'</h2><button type="button" class="btn sm ghost" data-xclose aria-label="Fechar">✕</button></div>'+h+'</div></div>';
  el.querySelector('[data-xclose]').onclick=()=>{el.innerHTML=''};el.querySelector('.sheet').addEventListener('click',e=>{if(e.target.classList.contains('sheet'))el.innerHTML=''});
 }
+
+/* ===== Evitar cadastros duplicados ===== */
+function nrm(t){return norm(t||'')}
+function near(a,b,p){a=num(a);b=num(b);return a>0&&b>0&&Math.abs(a-b)<=Math.max(1,Math.max(a,b)*(p||0.01))}
+function dupFind(col,o){ // devolve {kind,other,msg}
+ const others=(S[col]||[]).filter(x=>x.id!==o.id);
+ if(col==='jobs'&&o.sal!==false&&!o.dupOk){const r=S.rec.find(r=>r.type==='in'&&(near(r.val,o.val,0.10)||(r.cat==='Salário'&&nrm(r.desc).includes(nrm(o.patrao).split(' ')[0]||'#'))));
+  if(r)return {kind:'jobSal',other:r,job:o,msg:'Você já tem <b>'+esc(r.desc)+'</b> de <b>'+R(r.val)+'</b> cadastrado em <b>Fixas</b>. Esse acordo com <b>'+esc(o.patrao)+'</b> ('+R(o.val)+'/mês) é <b>o mesmo salário</b>?'}}
+ if(col==='rec'&&o.type==='in'){const j=(S.jobs||[]).find(j=>j.sal!==false&&!j.dupOk&&near(j.val,o.val,0.10));
+  if(j)return {kind:'jobSal',other:o,job:j,msg:'Você já tem o acordo com <b>'+esc(j.patrao)+'</b> de <b>'+R(j.val)+'</b>/mês na aba <b>Trabalho</b>, que já entra na previsão. Essa entrada <b>'+esc(o.desc)+'</b> ('+R(o.val)+') é <b>o mesmo dinheiro</b>?'}}
+ let d=null;
+ if(col==='rec')d=others.find(x=>x.type===o.type&&(nrm(x.desc)===nrm(o.desc)||near(x.val,o.val)&&(x.day||1)===(o.day||1)));
+ if(col==='inst'||col==='instIn')d=others.find(x=>nrm(x.desc)===nrm(o.desc)||near(x.total,o.total)&&+x.n===+o.n);
+ if(col==='tx')d=others.find(x=>x.type===o.type&&x.date===o.date&&(near(x.val,o.val)||nrm(x.desc)===nrm(o.desc)&&nrm(o.desc)));
+ if(col==='jobs')d=others.find(x=>nrm(x.patrao)===nrm(o.patrao));
+ if(d){const nm=d.desc||d.patrao||'item',v=d.val!=null?d.val:d.total;return {kind:'same',other:d,msg:'Já existe um cadastro parecido: <b>'+esc(nm)+'</b>'+(v?' de <b>'+R(v)+'</b>':'')+(d.date?' em '+d.date.slice(8,10)+'/'+d.date.slice(5,7):'')+'. É <b>o mesmo</b>? Se for, ele seria contado duas vezes.'}}
+ return null;
+}
+function dupAsk(msg,btns){
+ const old=document.querySelector('.dupask');if(old)old.remove();
+ const el=document.createElement('div');el.className='dupask';el.setAttribute('role','dialog');
+ el.innerHTML='<div class="dupbox"><div style="font-size:22px">⚠️</div><h3 style="margin:4px 0 8px">Pode estar duplicado</h3><p style="margin:0 0 14px;line-height:1.5">'+msg+'</p><div class="dupbtns">'+btns.map((b,i)=>'<button type="button" class="btn '+(i===0?'primary':i===btns.length-1?'ghost':'')+'" data-i="'+i+'">'+b[0]+'</button>').join('')+'</div></div>';
+ document.body.appendChild(el);el.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{el.remove();btns[+b.dataset.i][1]()});
+}
+function saveChecked(col,o,msg,after){
+ const isNew=!(S[col]||[]).some(x=>x.id===o.id);const d=isNew||col==='jobs'||col==='rec'?dupFind(col,o):null;
+ const doSave=()=>{upsert(col,o);if(after)after();commit(msg);closeSheetQuiet();};
+ if(!d)return doSave(),undefined;
+ if(d.kind==='jobSal'){
+  dupAsk(d.msg,[
+   ['Sim, é o mesmo — acordo só para projeção (13º, férias, bônus)',()=>{if(col==='jobs')o.sal=false;else{const j=S.jobs.find(x=>x.id===d.job.id);if(j)j.sal=false}doSave();toast('Salário contado uma vez só')}],
+   ['Não, são rendas diferentes — somar as duas',()=>{if(col==='jobs')o.dupOk=1;else{const j=S.jobs.find(x=>x.id===d.job.id);if(j)j.dupOk=1}doSave()}],
+   ['Voltar e editar',()=>{}]]);
+  return false;
+ }
+ dupAsk(d.msg,[
+  ['É outro — salvar mesmo assim',doSave],
+  ['É o mesmo — não cadastrar de novo',()=>{closeSheetQuiet();render();toast('Nada foi duplicado')}],
+  ['Voltar e editar',()=>{}]]);
+ return false;
+}
+function dupWarnings(){ // duplicidades que já existem nos dados
+ const w=[];(S.jobs||[]).filter(j=>j.sal!==false&&!j.dupOk).forEach(j=>{const r=S.rec.find(r=>r.type==='in'&&near(r.val,j.val,0.10));if(r)w.push({k:'js:'+j.id+':'+r.id,txt:'<b>'+esc(r.desc)+'</b> ('+R0(r.val)+', em Fixas) e o acordo com <b>'+esc(j.patrao)+'</b> ('+R0(j.val)+') podem ser o mesmo salário — está somando duas vezes.'})});
+ const seen={};S.rec.forEach(r=>{const k=r.type+'|'+nrm(r.desc)+'|'+num(r.val);if(seen[k]&&!r.dupOk)w.push({k:'rr:'+r.id,txt:'<b>'+esc(r.desc)+'</b> ('+R0(r.val)+') aparece duas vezes em Fixas.'});seen[k]=1});
+ const si={};S.inst.forEach(i=>{const k=nrm(i.desc)+'|'+num(i.total)+'|'+i.n;if(si[k]&&!i.dupOk)w.push({k:'ii:'+i.id,txt:'A compra parcelada <b>'+esc(i.desc)+'</b> aparece duas vezes.'});si[k]=1});
+ return w;
+}
+function dupFix(k){
+ const [t,a,b]=k.split(':');
+ if(t==='js'){const j=S.jobs.find(x=>x.id===a),r=S.rec.find(x=>x.id===b);if(!j||!r)return;
+  dupAsk('<b>'+esc(r.desc)+'</b> ('+R(r.val)+') em Fixas e o acordo com <b>'+esc(j.patrao)+'</b> ('+R(j.val)+'/mês) são o mesmo dinheiro?',[
+   ['Sim — deixar o acordo só para projeção (13º, férias, bônus)',()=>{j.sal=false;S.demo=false;commit('Salário contado uma vez só')}],
+   ['Não, são rendas diferentes',()=>{j.dupOk=1;S.demo=false;commit('Ok, mantido')}],['Cancelar',()=>{}]]);return}
+ if(t==='rr'){const r=S.rec.find(x=>x.id===a);if(!r)return;dupAsk('<b>'+esc(r.desc)+'</b> ('+R(r.val)+') está cadastrado duas vezes em Fixas. Apagar a cópia?',[['Apagar a cópia',()=>{S.rec=S.rec.filter(x=>x.id!==a);S.demo=false;commit('Cópia apagada')}],['São diferentes, manter',()=>{r.dupOk=1;S.demo=false;commit('Ok, mantido')}],['Cancelar',()=>{}]]);return}
+ if(t==='ii'){const i=S.inst.find(x=>x.id===a);if(!i)return;dupAsk('A compra parcelada <b>'+esc(i.desc)+'</b> está duas vezes. Apagar a cópia?',[['Apagar a cópia',()=>{S.inst=S.inst.filter(x=>x.id!==a);S.demo=false;commit('Cópia apagada')}],['São diferentes, manter',()=>{i.dupOk=1;S.demo=false;commit('Ok, mantido')}],['Cancelar',()=>{}]]);return}
+}
 /* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
 let projMonth=null;
 function scnAdj(sc,m){ // ajustes do cenário simulado para o mês m: [entra a mais, sai a mais]
@@ -708,6 +765,7 @@ function vResumo(){
  const tile=(l,v,s,cls,x,m)=>'<div class="rtile'+(x?' xclick':'')+'"'+(x?' data-x="'+x+'" data-m="'+(m||'')+'" title="Toque para ver como foi calculado"':'')+'><div class="lb">'+l+(x?' ⓘ':'')+'</div><div class="vl '+(cls||'')+'">'+v+'</div><div class="sub">'+s+'</div></div>';
  const li=(ic,t,v,cls,go)=>'<div class="rrow"'+(go?' data-go="'+go+'" role="button" tabindex="0"':'')+'><span class="ri">'+ic+'</span><span class="rt">'+t+'</span><span class="rv mono '+(cls||'')+'">'+v+'</span></div>';
  const al=[];
+ dupWarnings().forEach(d=>al.push(['bad','⚠️ Possível duplicidade: '+d.txt+' <button class="btn sm" data-act="dupFix" data-k="'+d.k+'">Resolver</button>','']));
  if(late.length)al.push(['bad','<b>'+late.length+' conta'+(late.length>1?'s':'')+' atrasada'+(late.length>1?'s':'')+'</b> ('+R0(late.reduce((a,b)=>a+b.val,0))+'). Pague primeiro para evitar juros.','pagar']);
  if(neg)al.push(['bad','Pela projeção, o saldo fica <b>negativo em '+mLabel(neg.m,true)+'</b> ('+R0(neg.saldo)+'). Simule cortes ou renda extra abaixo.','']);
  fer.forEach(([p,f])=>al.push([f.venc?'bad':'warn','<b>Férias de '+esc(p)+'</b> '+(f.venc?'já venceram':'vencem em '+dBR(f.limit)+' (faltam '+f.dias+' dias)')+': '+R0(f.dif)+' a receber.','trab']));
@@ -800,8 +858,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.20';
+const APP_VERSION='2.21';
 const CHANGELOG=[
+ ['2.21','12/10/2026',['Evita duplicados: ao salvar algo parecido com um cadastro existente (mesmo valor ou nome), o app pergunta se é o mesmo.','Salário em Fixas + acordo informal com o mesmo valor: escolha "é o mesmo" e o acordo fica só para projeção (13º, férias, bônus).','Painel avisa duplicidades que já existem, com botão Resolver.']],
  ['2.20','12/10/2026',['Botão ← Voltar no topo de cada tela (volta para a tela anterior). O voltar do celular também funciona dentro do app.']],
  ['2.19','12/10/2026',['Toque nos números para ver como foram calculados: meses da projeção, saldo em conta, fim do mês e fim do ano — item por item (entradas, contas, parcelas, estimativa do dia a dia, dízimo e ofertas).']],
  ['2.18','12/10/2026',['Revisão das contas: saldo em conta só desconta o que já foi pago (contas do mês não pagas ficam em "A pagar").','Compras no cartão saem do saldo no mês da fatura.','Média do dia a dia usa os 3 últimos meses completos, sem contar dízimo nem dinheiro guardado em metas (evita contar o dízimo duas vezes).','"Guardei dinheiro" na meta agora sai do saldo em conta.']],
@@ -1972,7 +2031,7 @@ function formTx(t){
   if(!need(f,['desc','val','date']))return false;
   const o={id:t.id||uid(),type:f.querySelector('.seg').dataset.val,desc:f.desc.value.trim(),val:num(f.val.value),date:f.date.value,cat:f.cat.value,pay:f.pay.value,cardId:f.card.value||null};
   if(o.cardId)o.pay='Crédito';
-  upsert('tx',o);lancMonth=o.date.slice(0,7);commit(t.id?'Lançamento atualizado':'Lançamento salvo');});
+  return saveChecked('tx',o,t.id?'Lançamento atualizado':'Lançamento salvo',()=>{lancMonth=o.date.slice(0,7)});});
 }
 function formRec(r){
  r=r||{type:'out',desc:'',cat:'Moradia',val:'',day:10,start:CUR};
@@ -1985,7 +2044,7 @@ function formRec(r){
   '<label class="f">Pagar para (quem recebe)<input name="to" value="'+esc(r.to||'')+'" placeholder="Ex.: Imobiliária, Celesc"></label>'+
   cardField(r.cardId,'Cai no cartão (opcional)')+'</div>',f=>{
   if(!need(f,['desc','val']))return false;
-  upsert('rec',{id:r.id||uid(),type:f.querySelector('.seg').dataset.val,desc:f.desc.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||1))),cat:f.cat.value,start:f.start.value||CUR,to:f.to.value.trim(),cardId:f.card.value||null});commit('Recorrente salva');});
+  return saveChecked('rec',{id:r.id||uid(),type:f.querySelector('.seg').dataset.val,desc:f.desc.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||1))),cat:f.cat.value,start:f.start.value||CUR,to:f.to.value.trim(),cardId:f.card.value||null},'Recorrente salva');});
 }
 function formInst(i){
  i=i||{desc:'',cat:'Outros',total:'',n:10,rate:0,first:CUR,day:10,pay:'Crédito'};
@@ -2003,7 +2062,7 @@ function formInst(i){
   '<p class="muted full" id="instPrev" style="margin:0;font-size:13px"></p></div>',f=>{
   if(!need(f,['desc','total','n']))return false;
   const cid=f.card.value||null;
-  upsert('inst',{id:i.id||uid(),desc:f.desc.value.trim(),total:num(f.total.value),n:Math.max(1,Math.round(num(f.n.value))),rate:num(f.rate.value),first:f.first.value||CUR,day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||10))),cat:f.cat.value,pay:cid?'Crédito':f.pay.value,cardId:cid,to:f.to.value.trim()});commit('Compra parcelada salva');});
+  return saveChecked('inst',{id:i.id||uid(),desc:f.desc.value.trim(),total:num(f.total.value),n:Math.max(1,Math.round(num(f.n.value))),rate:num(f.rate.value),first:f.first.value||CUR,day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||10))),cat:f.cat.value,pay:cid?'Crédito':f.pay.value,cardId:cid,to:f.to.value.trim()},'Compra parcelada salva');});
  const f=document.getElementById('sheetForm');
  const prev=()=>{const n=Math.max(1,Math.round(num(f.n.value)));const p=parcelaPrice(num(f.total.value),n,num(f.rate.value));document.getElementById('instPrev').innerHTML=num(f.total.value)?'Parcela: <b class="mono">'+R(p)+'</b> · total <b class="mono">'+R(p*n)+'</b> · última em <b>'+mLabel(addM(f.first.value||CUR,n-1),true)+'</b>':'Informe o valor para ver a parcela.'};
  f.addEventListener('input',prev);prev();
@@ -2021,7 +2080,7 @@ function formInIn(i){
   '<p class="muted full" id="inPrev" style="margin:0;font-size:13px"></p></div>',f=>{
   if(!need(f,['desc','total','n']))return false;
   S.instIn=S.instIn||[];
-  upsert('instIn',{id:i.id||uid(),desc:f.desc.value.trim(),total:num(f.total.value),n:Math.max(1,Math.round(num(f.n.value))),first:f.first.value||CUR,day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||10))),cat:f.cat.value,from:f.from.value.trim()});commit('Entrada parcelada salva');});
+  return saveChecked('instIn',{id:i.id||uid(),desc:f.desc.value.trim(),total:num(f.total.value),n:Math.max(1,Math.round(num(f.n.value))),first:f.first.value||CUR,day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||10))),cat:f.cat.value,from:f.from.value.trim()},'Entrada parcelada salva');});
  const f=document.getElementById('sheetForm');
  const prev=()=>{const n=Math.max(1,Math.round(num(f.n.value)));const t=num(f.total.value);document.getElementById('inPrev').innerHTML=t?'Parcela: <b class="mono">'+R(t/n)+'</b> por mês · última em <b>'+mLabel(addM(f.first.value||CUR,n-1),true)+'</b>':'Informe o valor para ver a parcela.'};
  f.addEventListener('input',prev);prev();
@@ -2108,7 +2167,7 @@ function formJob(j){
   '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="sal" type="checkbox" style="width:auto"'+(j.sal!==false?' checked':'')+'> Colocar o pagamento mensal na previsão '+(hasSal?'<span class="muted">(desmarque se já cadastrou esse salário em Fixas)</span>':'')+'</label>'+
   '<p class="muted full" id="jobPrev" style="margin:0;font-size:13px"></p></div>',f=>{
   if(!need(f,['desc','val']))return false;
-  upsert('jobs',{id:j.id||uid(),patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked,noFgts:f.noFgts.checked});commit('Acordo salvo');});
+  return saveChecked('jobs',{id:j.id||uid(),patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked,noFgts:f.noFgts.checked,dupOk:j.dupOk},'Acordo salvo');});
  const f=document.getElementById('sheetForm');
  const cur=()=>({val:num(f.val.value),day:num(f.day.value),start:(f.startDate.value||'').slice(0,7),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value,bonus:num(f.bonus.value),bonusMonth:+f.bonusMonth.value,bonusName:j.bonusName,extra:num(f.extra.value),desc:num(f.pct.value),sal:true,patrao:f.desc.value});
  const prev=()=>{const x=cur();if(!x.val){document.getElementById('jobPrev').innerHTML='Informe quanto recebe por mês.';return}const y=+CUR.slice(0,4);const r=jobYear(x,CUR,y+'-12',true);const c=jobVsClt(x,y);
@@ -2254,6 +2313,7 @@ document.addEventListener('click',e=>{
  else if(a==='scnClear'){SCN={};saveScn();render();setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},20);toast('Cenário limpo')}
  else if(a==='togTitheProj'){e.preventDefault();S.titheProj=S.titheProj===false;S.demo=false;commit(S.titheProj?'Dízimo incluído nas projeções':'Dízimo fora das projeções');setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},30)}
  else if(a==='back'){if(history.state&&history.state.cofreView){history.back()}else goBack()}
+ else if(a==='dupFix'){dupFix(b.dataset.k)}
  else if(a==='eye'){HIDE=!HIDE;try{localStorage.setItem('cofre-ocultar',HIDE?'1':'0')}catch(e){}render();toast(HIDE?'Valores escondidos':'Valores visíveis')}
  else if(a==='addInIn')formInIn();
  else if(a==='editClt')formClt();
