@@ -743,8 +743,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.13';
+const APP_VERSION='2.14';
 const CHANGELOG=[
+ ['2.14','12/10/2026',['Simulador refeito: compra parcelada grande cruzando todos os seus dados — sobra e saldo com e sem a compra mês a mês, mês mais apertado, menor saldo, quando termina e gráfico comparando.','Simulador mostra o saldo do mês atual considerando tudo.']],
  ['2.13','12/10/2026',['Dízimo e ofertas entram em todas as projeções (resumo, fim do mês, fim do ano, simulação, sobra prevista e metas).','Dízimo calculado também sobre 13º, férias e pagamentos do acordo informal/CLT.']],
  ['2.12','12/10/2026',['Painel: 🧭 Resumo geral cruzando tudo (saldo hoje, fim do mês, fim do ano, contas, parcelas, trabalho, dízimo, orçamento, metas e alertas).','🔮 Projeção e simulação no topo do Painel: escolha a data e simule cenários (renda a mais/menos, gastos, compra à vista ou parcelada) comparando com hoje.']],
  ['2.11','12/10/2026',['Botão 👁️ Esconder saldo: esconde todos os valores do app (fica lembrado neste aparelho).']],
@@ -1711,39 +1712,78 @@ function qc(){
 }
 
 /* Simulador */
+function nowStatus(){ // saldo agora e fim do mês, cruzando tudo
+ const x=month(CUR),bal=balanceAt(CUR),pend=pendingIn(CUR),varRest=Math.max(0,avgVarOut()-x.outVar),diz=titheOut(CUR);
+ return {bal,pend,varRest,diz,fim:(bal==null?0:bal)+pend-varRest-diz,sobra:projSobra(addM(CUR,1))};
+}
 function vSim(){
+ const st=nowStatus();
  return top('Simulador de compra','Vale a pena comprar agora?','')+
+ '<section class="card resumo" style="margin-bottom:16px"><div class="rtiles">'+
+  '<div class="rtile"><div class="lb">Hoje em conta</div><div class="vl">'+(st.bal==null?'—':R(st.bal))+'</div><div class="sub">'+(st.bal==null?'informe o saldo inicial no Painel':'saldo atual')+'</div></div>'+
+  '<div class="rtile"><div class="lb">Fim de '+mLabel(CUR)+' · com tudo</div><div class="vl '+(st.fim>=0?'pos':'neg')+'">'+R(st.fim)+'</div><div class="sub">+ a receber '+R0(st.pend)+' − dia a dia ~'+R0(st.varRest)+' − dízimo/oferta '+R0(st.diz)+'</div></div>'+
+  '<div class="rtile"><div class="lb">Sobra prevista por mês</div><div class="vl '+(st.sobra>=0?'pos':'neg')+'">'+R(st.sobra)+'</div><div class="sub">renda + trabalho − contas − parcelas − dia a dia − dízimo</div></div>'+
+ '</div></section>'+
  '<div class="grid g32"><section class="card"><div class="hd"><h2>Dados da compra</h2></div><div class="form">'+
   '<label class="f full">O que você quer comprar<input id="sDesc" value="Carro usado"></label>'+
   '<label class="f">Preço à vista (R$)<input id="sPrice" type="number" inputmode="decimal" min="0" step="100" value="45000"></label>'+
   '<label class="f">Desconto à vista (%)<input id="sDisc" type="number" inputmode="decimal" min="0" step="0.5" value="5"></label>'+
   '<label class="f">Entrada (R$)<input id="sDown" type="number" inputmode="decimal" min="0" step="100" value="10000"></label>'+
+  '<label class="f">Entrada paga em<input id="sDownM" type="month" value="'+CUR+'"></label>'+
   '<label class="f">Nº de parcelas<input id="sN" type="number" inputmode="numeric" min="1" step="1" value="48"></label>'+
   '<label class="f">Juros (% ao mês)<input id="sRate" type="number" inputmode="decimal" min="0" step="0.01" value="1.89"></label>'+
+  '<label class="f">1ª parcela em<input id="sFirst" type="month" value="'+addM(CUR,1)+'"></label>'+
   '<label class="f">Custo mensal extra (R$)<input id="sExtra" type="number" inputmode="decimal" min="0" step="50" value="600"></label>'+
-  '<p class="muted full" style="margin:0;font-size:12.5px">Custo extra: seguro, IPVA, manutenção, condomínio… o que o bem gera por mês depois de comprado.</p>'+
+  '<p class="muted full" style="margin:0;font-size:12.5px">Custo extra: seguro, IPVA, manutenção, combustível, condomínio… o que o bem gera por mês depois de comprado.</p>'+
  '</div></section>'+
- '<section class="card"><div class="hd"><h2>Resultado</h2></div><div class="out-box" id="sOut"></div><div id="sVerdict"></div></section></div>';
+ '<section class="card"><div class="hd"><h2>Resultado</h2></div><div class="out-box" id="sOut"></div><div id="sVerdict"></div></section></div>'+
+ '<section class="card" style="margin-top:16px"><div class="hd"><h2>📉 Sem a compra × com a compra</h2><div class="legend"><span><i style="background:var(--muted)"></i>Sem</span><span><i style="background:var(--accent)"></i>Com</span></div></div><div id="sChart" class="chartwrap"></div><div id="sTable" style="overflow:auto;max-height:380px;margin-top:10px"></div>'+
+ '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Projeção cruzando tudo: renda, trabalho (13º, férias, acordos), contas fixas, parcelas atuais, gastos do dia a dia, dízimo e ofertas. "Com" soma a entrada, as parcelas e o custo extra da compra.</p></section>';
 }
 function simCalc(){
- const g=id=>num((document.getElementById(id)||{}).value);
+ const g=id=>num((document.getElementById(id)||{}).value),gv=id=>((document.getElementById(id)||{}).value||'');
  if(!document.getElementById('sOut'))return;
- const price=g('sPrice'),disc=g('sDisc'),down=g('sDown'),n=Math.max(1,Math.round(g('sN'))),rate=g('sRate'),extra=g('sExtra');
+ const price=g('sPrice'),disc=g('sDisc'),down=Math.min(g('sDown'),price),n=Math.max(1,Math.round(g('sN'))),rate=g('sRate'),extra=g('sExtra');
+ const downM=gv('sDownM')||CUR,first=gv('sFirst')||addM(CUR,1);
  const fin=Math.max(0,price-down),p=parcelaPrice(fin,n,rate),total=down+p*n,vista=price*(1-disc/100),diff=total-vista;
- const x=month(CUR),inc=x.inFix||x.entradas,sob=projSobra(addM(CUR,1));
- const after=sob-p-extra,pct=inc?(p+extra)/inc:0;
+ const last=addM(first,n-1),to=diffM(CUR,addM(last,3))>120?addM(CUR,120):addM(last,3);
+ const sc={oneVal:down,oneM:downM,instVal:fin,instN:n,instRate:rate,instFrom:first,extra:-extra,extraFrom:first};
+ const A=projRows(to),B=projRows(to,sc);
+ const x=month(CUR),inc=x.inFix||x.entradas,pct=inc?(p+extra)/inc:0;
+ const inRange=r=>diffM(first,r.m)>=0&&diffM(r.m,last)>=0;
+ const iA=A.filter(inRange),iB=B.filter(inRange);const avg=a=>a.length?a.reduce((s,r)=>s+r.sobra,0)/a.length:0;
+ const sobA=avg(iA),sobB=avg(iB);
+ const worst=B.reduce((a,r)=>r.sobra<a.sobra?r:a,B[0]),lowB=B.reduce((a,r)=>r.saldo<a.saldo?r:a,B[0]);
+ const negM=B.filter(r=>r.sobra<0).length,firstNeg=B.find(r=>r.saldo<0);
+ const endA=A.find(r=>r.m===last)||A[A.length-1],endB=B.find(r=>r.m===last)||B[B.length-1];
  const mVista=monthsToSave(Math.max(0,vista-down),0.8);
  document.getElementById('sOut').innerHTML=
-  k2('Parcela',R(p),n+'x · financiando '+R0(fin))+k2('Total pago',R0(total),'à vista sairia '+R0(vista))+
+  k2('Parcela',R(p),n+'x · financiando '+R0(fin)+' · '+mLabel(first)+' a '+mLabel(last))+k2('Total pago',R0(total),'à vista sairia '+R0(vista))+
   k2('Custo de parcelar',R0(diff),diff>0?Math.round(diff/vista*100)+'% a mais':'sem custo extra',diff>vista*0.25?'neg':diff>0?'wrn':'pos')+
-  k2('Peso na renda',Math.round(pct*100)+'%','parcela + custos extras',pct>0.3?'neg':pct>0.15?'wrn':'pos')+
-  k2('Sobra depois',R0(after),'por mês',after<0?'neg':'pos')+
+  k2('Peso na renda',Math.round(pct*100)+'%','parcela + custo extra ('+R0(p+extra)+'/mês)',pct>0.3?'neg':pct>0.15?'wrn':'pos')+
+  k2('Sobra por mês · sem',R0(sobA),'média durante as parcelas',sobA<0?'neg':'pos')+
+  k2('Sobra por mês · com',R0(sobB),'média durante as parcelas',sobB<0?'neg':'pos')+
+  k2('Mês mais apertado',mLabel(worst.m),'sobra '+R0(worst.sobra)+' com a compra',worst.sobra<0?'neg':'wrn')+
+  k2('Menor saldo com a compra',R0(lowB.saldo),'em '+mLabel(lowB.m)+(lowB.saldo<0?' · fica negativo!':''),lowB.saldo<0?'neg':'pos')+
+  k2('Saldo ao terminar ('+mLabel(last)+')',R0(endB.saldo),'sem a compra seria '+R0(endA.saldo)+' (−'+R0(Math.max(0,endA.saldo-endB.saldo))+')','acc')+
   k2('Juntar e pagar à vista',mVista==null?'—':dur(mVista),mVista==null?'sem sobra hoje':'guardando a sobra, rendendo 0,8% a.m.','acc');
  let cls,msg;
- if(after<0||pct>0.35){cls='bad';msg='<b>Não recomendado agora.</b> Essa compra deixa seu mês no vermelho ou compromete mais de 35% da renda. Aumente a entrada, escolha algo mais barato ou junte antes.'}
- else if(pct>0.2||diff>vista*0.3){cls='warn';msg='<b>Dá, mas pesa.</b> '+(diff>vista*0.3?'Você paga '+R0(diff)+' só de juros. ':'')+(mVista!=null&&mVista<=n/2?'Juntando a sobra você compra à vista em '+dur(mVista)+', bem antes de terminar as parcelas. ':'')+'Negocie juros menores ou uma entrada maior.'}
- else{cls='good';msg='<b>Cabe no orçamento.</b> Mantém sua sobra positiva e o peso na renda fica saudável. '+(diff>0?'Mesmo assim, compare: à vista você economiza '+R0(diff)+'.':'')}
+ if(firstNeg||sobB<0||pct>0.35){cls='bad';msg='<b>Não recomendado agora.</b> '+(firstNeg?'Seu saldo fica <b>negativo em '+mLabel(firstNeg.m,true)+'</b>. ':'')+(sobB<0?'Durante as parcelas falta, em média, '+R0(-sobB)+' por mês. ':'')+(pct>0.35?'A compra leva '+Math.round(pct*100)+'% da renda fixa. ':'')+'Aumente a entrada, alongue menos, escolha algo mais barato ou junte antes.'}
+ else if(pct>0.2||negM>0||diff>vista*0.3||sobB<sobA*0.35){cls='warn';msg='<b>Dá, mas pesa.</b> Sua sobra cai de '+R0(sobA)+' para '+R0(sobB)+' por mês'+(negM?' e '+negM+' mês'+(negM>1?'es':'')+' fica'+(negM>1?'m':'')+' no vermelho (o pior é '+mLabel(worst.m)+')':'')+'. '+(diff>vista*0.3?'Você paga '+R0(diff)+' só de juros. ':'')+(mVista!=null&&mVista<=n/2?'Juntando a sobra você compra à vista em '+dur(mVista)+'. ':'')}
+ else{cls='good';msg='<b>Cabe no orçamento.</b> Mesmo com a compra sobra cerca de '+R0(sobB)+' por mês e o saldo nunca fica negativo. '+(diff>0?'À vista você economizaria '+R0(diff)+'.':'')}
  document.getElementById('sVerdict').innerHTML='<div class="verdict '+cls+'">'+msg+'</div><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn sm" data-act="simToInst">Lançar como compra parcelada</button></div>';
+ // gráfico
+ const W=760,H=220,pl=56,pr=12,pt=12,pb=26,vals=A.map(r=>r.saldo).concat(B.map(r=>r.saldo));let mn=Math.min(0,...vals),mx=Math.max(...vals,1);
+ const xs=i=>pl+i*(W-pl-pr)/Math.max(1,A.length-1),ys=v=>pt+(mx-v)*(H-pt-pb)/((mx-mn)||1);
+ const path=rs=>rs.map((r,i)=>(i?'L':'M')+xs(i).toFixed(1)+' '+ys(r.saldo).toFixed(1)).join(' ');
+ let gsv='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:480px;height:auto" role="img" aria-label="Saldo com e sem a compra">';
+ [mx,(mx+mn)/2,mn].forEach(v=>gsv+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+ys(v)+'" y2="'+ys(v)+'" stroke="var(--line)"/><text x="'+(pl-6)+'" y="'+(ys(v)+4)+'" text-anchor="end" font-size="10" fill="var(--muted)">'+short(v)+'</text>');
+ if(mn<0)gsv+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+ys(0)+'" y2="'+ys(0)+'" stroke="var(--bad)" stroke-dasharray="4 4"/>';
+ const fi=A.findIndex(r=>r.m===first),li=A.findIndex(r=>r.m===last);if(fi>=0)gsv+='<rect x="'+xs(fi)+'" y="'+pt+'" width="'+Math.max(2,xs(li>=0?li:A.length-1)-xs(fi))+'" height="'+(H-pt-pb)+'" fill="var(--accent)" opacity=".06"/>';
+ gsv+='<path d="'+path(A)+'" fill="none" stroke="var(--muted)" stroke-width="2"/><path d="'+path(B)+'" fill="none" stroke="var(--accent)" stroke-width="2.5"/>';
+ const step=Math.max(1,Math.ceil(A.length/8));A.forEach((r,i)=>{if(i%step===0)gsv+='<text x="'+xs(i)+'" y="'+(H-8)+'" text-anchor="middle" font-size="10" fill="var(--muted)">'+mLabel(r.m)+'</text>'});
+ document.getElementById('sChart').innerHTML=gsv+'</svg>';
+ document.getElementById('sTable').innerHTML='<table class="ptab"><thead><tr><th>Mês</th><th>Sobra sem</th><th>Sobra com</th><th>Saldo sem</th><th>Saldo com</th></tr></thead><tbody>'+A.map((r,i)=>{const b=B[i];return '<tr'+(inRange(r)?'':' style="opacity:.6"')+(r.m===worst.m?' class="cur"':'')+'><td>'+mLabel(r.m)+(r.m===downM&&down?' <span class="muted">entrada</span>':'')+(r.m===first?' <span class="muted">1ª parc.</span>':'')+(r.m===last?' <span class="muted">última</span>':'')+'</td><td class="'+(r.sobra>=0?'pos':'neg')+'">'+R0(r.sobra)+'</td><td class="'+(b.sobra>=0?'pos':'neg')+'">'+R0(b.sobra)+'</td><td>'+R0(r.saldo)+'</td><td class="'+(b.saldo>=0?'':'neg')+'"><b>'+R0(b.saldo)+'</b></td></tr>'}).join('')+'</tbody></table>';
 }
 function k2(l,v,s,c){return '<div class="kpi"><div class="lb">'+l+'</div><div class="vl '+(c==='acc'?'':c||'')+'" '+(c==='acc'?'style="color:var(--accent)"':'')+'>'+v+'</div><div class="sub">'+s+'</div></div>'}
 
@@ -2163,7 +2203,7 @@ document.addEventListener('click',e=>{
  else if(a==='mNext'){lancMonth=addM(lancMonth,1);render()}
  else if(a==='clearDemo'){if(delArm!==b){delArm=b;b.textContent='Tem certeza? Toque de novo';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Apagar exemplos e começar'}},3500);return}S=blank();delArm=null;commit('Pronto! Comece cadastrando sua renda em Fixas.');view='fixas';render()}
  else if(a==='del'){if(!S[b.dataset.col]&&b.dataset.col!=='ideas')S[b.dataset.col]=[];if(delArm!==b){delArm=b;b.textContent='Confirmar';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Excluir'}},3000);return}delArm=null;if(b.dataset.col==='ideas'){saveIdeas(getIdeas().filter(x=>x.id!==id));toast('Excluído');return}S.demo=false;S[b.dataset.col]=S[b.dataset.col].filter(x=>x.id!==id);commit('Excluído')}
- else if(a==='simToInst'){const g=k=>num(document.getElementById(k).value);formInst({desc:document.getElementById('sDesc').value,cat:'Transporte',total:Math.max(0,g('sPrice')-g('sDown')),n:Math.max(1,Math.round(g('sN'))),rate:g('sRate'),first:addM(CUR,1),day:10,pay:'Boleto'})}
+ else if(a==='simToInst'){const g=k=>num(document.getElementById(k).value);formInst({desc:document.getElementById('sDesc').value,cat:'Transporte',total:Math.max(0,g('sPrice')-g('sDown')),n:Math.max(1,Math.round(g('sN'))),rate:g('sRate'),first:document.getElementById('sFirst').value||addM(CUR,1),day:10,pay:'Boleto'})}
 });
 document.addEventListener('input',e=>{
  if(e.target.id==='offRange'){const l=document.getElementById('offLbl');if(l)l.textContent=String(e.target.value).replace('.',',')+'%'}
