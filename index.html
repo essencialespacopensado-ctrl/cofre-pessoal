@@ -423,6 +423,7 @@ function extraIn(m){
  }
  if(k&&c.fer&&c.fer===m){out.push({key:m+':clt:fer',work:1,kind:'Férias + 1/3 (líquido)',name:'Férias',from:c.emp||'',day:Math.max(1,num(c.ferDay||1)),val:k.fer.net});}
  if(k&&c.fer&&c.ferAdj!==false&&addM(c.fer,1)===m){out.push({key:m+':clt:feradj',work:1,kind:'Ajuste: salário do mês de férias já veio junto com as férias',name:'Ajuste de férias',from:'',day:5,val:-k.mes.net});}
+ (S.jobs||[]).forEach(j=>jobItems(j,m).forEach(x=>out.push({key:m+':job:'+j.id+':'+x.k,work:1,kind:x.lb,name:x.name,from:'',day:x.day,val:x.val})));
  (S.deals||[]).forEach(d=>dealSched(d).filter(x=>x.m===m).forEach(x=>out.push({key:m+':acd:'+d.id+':'+x.k,work:1,kind:'Acordo · '+x.lb,name:d.cli||'Serviço',from:d.cli||'',day:x.day,val:x.val})));
  return out;
 }
@@ -440,6 +441,66 @@ function dealStatus(d){
  const sc=dealSched(d);const g=S.got||{};const got=x=>{const key=x.m+':acd:'+d.id+':'+x.k;if(g[key]!=null)return !!g[key];const dd=diffM(x.m,CUR);return dd>0||(dd===0&&x.day<=TODAY.getDate())};
  const rec=sc.filter(got).reduce((a,x)=>a+x.val,0),total=num(d.total),tax=total*num(d.tax)/100,cost=num(d.cost),lucro=total-tax-cost;
  const nx=sc.find(x=>!got(x));return {sc,rec,falta:total-rec,tax,cost,lucro,marg:total?lucro/total:0,hora:num(d.horas)?lucro/num(d.horas):0,next:nx};
+}
+
+/* ===== Acordo de trabalho com o patrão (fora da CLT) ===== */
+const MESES=['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+function jobActive(j,m){return (!j.start||diffM(j.start,m)>=0)&&(!j.end||diffM(m,j.end)>=0)}
+function jobNet(j,v){return v*(1-num(j.desc)/100)}
+function job13(j,y){ // valor bruto do 13º no ano y
+ if(!j.t13||j.t13==='nao')return 0;const v=num(j.val);
+ if(j.t13==='int')return v;if(j.t13==='metade')return v/2;
+ let meses=12;if(j.start&&+j.start.slice(0,4)===y)meses=12-(+j.start.slice(5,7))+1;if(j.start&&+j.start.slice(0,4)>y)meses=0;
+ if(j.end&&+j.end.slice(0,4)===y)meses=Math.min(meses,+j.end.slice(5,7));return v*meses/12;
+}
+function jobItems(j,m){ // o que este acordo paga no mês m
+ const out=[];if(!num(j.val)&&!num(j.bonus))return out;const y=+m.slice(0,4),mm=+m.slice(5,7),nm=j.patrao||'Trabalho';
+ const act=jobActive(j,m);
+ if(act&&j.sal!==false&&num(j.val))out.push({k:'sal',lb:'Pagamento mensal',day:num(j.day)||5,val:jobNet(j,num(j.val))});
+ if(act&&num(j.extra))out.push({k:'var',lb:'Extras/comissão (média)',day:num(j.day)||5,val:jobNet(j,num(j.extra))});
+ const t=job13(j,y);
+ if(t>0&&jobActive(j,m)||t>0&&j.end&&diffM(j.end,m)>=0&&mm===12&&+j.end.slice(0,4)===y){
+  if(j.t13Split&&mm===11)out.push({k:'13a',lb:'13º · 1ª metade',day:30,val:jobNet(j,t/2)});
+  if(mm===12)out.push({k:'13b',lb:j.t13Split?'13º · 2ª metade':'13º salário',day:20,val:jobNet(j,j.t13Split?t/2:t)});
+ }
+ if(act&&j.fer&&j.fer!=='nada'&&j.ferMonth===m){
+  if(j.fer==='terco')out.push({k:'fer',lb:'Férias: 1/3 a mais',day:num(j.day)||5,val:jobNet(j,num(j.val)/3)});
+  if(j.fer==='nao'&&j.sal!==false)out.push({k:'fer',lb:'Férias sem pagamento (mês sem salário)',day:num(j.day)||5,val:-jobNet(j,num(j.val))});
+ }
+ if(num(j.bonus)&&+j.bonusMonth===mm&&(act||(j.end&&diffM(j.end,m)===0)))out.push({k:'bon',lb:j.bonusName||'Bônus/gratificação',day:20,val:jobNet(j,num(j.bonus))});
+ return out.map(x=>({...x,name:nm}));
+}
+function jobYear(j,from,to,pend){ // soma de from até to (pend: só o que ainda não caiu)
+ const r={sal:0,ext:0,tot:0,rows:[]};for(let m=from;diffM(m,to)>=0;m=addM(m,1)){let it=jobItems(j,m);if(pend&&m===CUR)it=it.filter(x=>x.day>TODAY.getDate());const sal=it.filter(x=>x.k==='sal'||x.k==='var').reduce((a,x)=>a+x.val,0),ext=it.filter(x=>!(x.k==='sal'||x.k==='var')).reduce((a,x)=>a+x.val,0);r.sal+=sal;r.ext+=ext;r.tot+=sal+ext;r.rows.push({m,sal,ext,it})}return r;
+}
+function jobVsClt(j,y){ // o que a CLT daria a mais no ano, para comparar
+ const v=num(j.val);let meses=12;if(j.start&&+j.start.slice(0,4)===y)meses=12-(+j.start.slice(5,7))+1;
+ const l13=v*meses/12,lfer=v/3,fgts=v*.08*meses;const tem13=job13(j,y),temFer=j.fer==='terco'?v/3:0;
+ return {l13,lfer,fgts,dif13:Math.max(0,l13-tem13),difFer:Math.max(0,lfer-temFer)};
+}
+function monthNext(name){const i=MESES.indexOf(name);if(i<0)return '';let y=+CUR.slice(0,4);const m=y+'-'+String(i+1).padStart(2,'0');return diffM(CUR,m)>=0?m:(y+1)+'-'+String(i+1).padStart(2,'0')}
+function parseJob(t){
+ const T=' '+norm(t)+' ';const R2={};const money=x=>num(String(x).replace(/\./g,'').replace(',','.'));
+ const raw=' '+String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')+' ';
+ const mv='(?:r\\$\\s*)?(\\d{1,3}(?:\\.\\d{3})+(?:,\\d{1,2})?|\\d+(?:,\\d{1,2})?)\\s*(mil|k)?';const val=m=>m?money(m[1])*(m[2]?1000:1):0;
+ let m=raw.match(new RegExp(mv+'\\s*(?:reais\\s*)?(?:por mes|mensal|ao mes|/mes|todo mes)'));if(m)R2.val=val(m);
+ if(!R2.val){m=raw.match(new RegExp('(?:salario|ganho|ganhar|paga|pagar|recebo|receber|combinamos|combinado|acordamos)[^\\d]{0,25}'+mv));if(m)R2.val=val(m)}
+ m=raw.match(/(?:todo )?dia\s*(\d{1,2})/);if(m)R2.day=+m[1];
+ if(/(nao|sem)\s+(tem\s+|paga\s+|vai pagar\s+|recebo\s+)?(o\s+)?(13|decimo)/.test(raw))R2.t13='nao';
+ else if(/(13|decimo)[^.;]{0,30}(metade|meio)/.test(raw)||/(metade|meio)[^.;]{0,20}(13|decimo)/.test(raw))R2.t13='metade';
+ else if(/(13|decimo)[^.;]{0,30}proporcional/.test(raw))R2.t13='prop';
+ else if(/(13|decimo)/.test(raw))R2.t13='int';
+ if(/(13|decimo)[^.;]{0,40}(duas|2)\s*(vezes|parcelas|x)/.test(raw)||/(13|decimo)[^.;]{0,40}novembro/.test(raw))R2.t13Split=true;
+ if(/ferias[^.;]{0,40}(sem|nao)\s*(pagamento|pagar|remunera|receber|recebo|ganhar)/.test(raw)||/(nao|sem)\s+(tem\s+|paga\s+)?ferias/.test(raw))R2.fer='nao';
+ else if(/ferias[^.;]{0,40}(1\/3|um terco|terco)/.test(raw)&&!/ferias[^.;]{0,25}sem\s*(o\s*)?(1\/3|um terco|terco)/.test(raw))R2.fer='terco';
+ else if(/ferias/.test(raw))R2.fer='simples';
+ m=raw.match(/ferias[^.;]{0,40}?(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/);if(m)R2.ferMonth=monthNext(m[1]);
+ m=raw.match(new RegExp('(bonus|bonificacao|gratificacao|abono|premio|cesta de natal|ajuda de natal|presente de natal|participacao)[^\\d]{0,25}'+mv));if(m){R2.bonus=val({1:m[2],2:m[3]});R2.bonusName=({gratificacao:'Gratificação',bonificacao:'Bonificação',bonus:'Bônus',premio:'Prêmio',participacao:'Participação',abono:'Abono','cesta de natal':'Cesta de Natal','ajuda de natal':'Ajuda de Natal','presente de natal':'Presente de Natal'})[m[1]]||'Bônus'}
+ m=raw.match(/(bonus|bonificacao|gratificacao|abono|premio|natal|participacao)[^.;]{0,50}?(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|natal|fim de ano|final do ano)/);if(m&&R2.bonus)R2.bonusMonth=(MESES.indexOf(m[2])>=0?MESES.indexOf(m[2])+1:12);else if(R2.bonus)R2.bonusMonth=12;
+ m=raw.match(new RegExp('(?:comissao|extras?|horas extras|gorjeta|adicional)[^\\d]{0,30}'+mv));if(m)R2.extra=val(m);
+ m=raw.match(/(?:desconto|desconta|descontar|inss|imposto|retencao)[^\d]{0,20}(\d{1,2}(?:,\d+)?)\s*%/);if(m)R2.desc=num(m[1].replace(',','.'));
+ m=raw.match(/(?:comecei|comeco|entrei|desde|inicio)[^.;]{0,20}?(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s*(?:de\s*)?(\d{4}))?/);if(m){const y=m[2]||CUR.slice(0,4);R2.start=y+'-'+String(MESES.indexOf(m[1])+1).padStart(2,'0')}
+ return R2;
 }
 /* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
 let projMonth=null;
@@ -532,9 +593,10 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.6';
+const APP_VERSION='2.7';
 const CHANGELOG=[
- ['2.6','12/10/2026',['Nova aba Trabalho: CLT pela lei 2026 (líquido, 13º, férias + 1/3, FGTS) entrando na previsão.','Acordos de prestação de serviço: escreva o combinado, o app monta os recebimentos e faz o balanço (imposto, custos, lucro, R$/hora).','A pagar mostra só o mês atual; meses futuros ficam em Lançamentos.']],
+ ['2.7','12/10/2026',['Acordo com o patrão (aba Trabalho): escreva o que foi combinado — mensal, 13º, férias, bônus, descontos — e veja quanto recebe até o fim do ano, comparando com a CLT.']],
+ ['2.6','12/10/2026',['Nova aba Trabalho: CLT pela lei 2026 (líquido, 13º, férias + 1/3, FGTS) entrando na previsão.','A pagar mostra só o mês atual; meses futuros ficam em Lançamentos.']],
  ['2.5','12/10/2026',['Lançamentos: cada mês (inclusive os futuros) mostra o salário, as contas fixas e as parcelas previstas.']],
  ['2.4','12/10/2026',['Entradas parceladas: "Falta receber" só desconta a parcela depois que ela cai.','Painel: "Como vou estar em…" — escolha mês e ano e veja o saldo previsto, com projeção mês a mês.','Painel: previsão do que entra no próximo mês (salário e parcelas).']],
  ['2.3','12/10/2026',['Resumo do link compartilhado atualizado (sem dízimo).']],
@@ -721,7 +783,7 @@ function buildNav(){
  setSync(syncState);
 }
 function render(){
- S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};S.deals=S.deals||[];S.clt=S.clt||null;
+ S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};S.deals=S.deals||[];S.jobs=S.jobs||[];S.clt=S.clt||null;
  const main=document.getElementById('main');
  document.body.classList.toggle('locked',locked||(ACCESS!=='ok'&&!ME.owner));
  if(ACCESS!=='ok'&&!ME.owner){main.innerHTML=vBlocked();return}
@@ -1033,7 +1095,7 @@ const AS_ACTIONS={
  inParc:()=>goView('parc',()=>formInIn()),
  clt:()=>goView('trab',()=>formClt()),
  trab:()=>goView('trab'),
- acordo:()=>goView('trab',()=>formDeal()),
+ acordo:()=>goView('trab',()=>formJob()),
  meta:()=>goView('metas',()=>formGoal()),
  saldoIni:()=>goView('fixas',()=>formInit()),
  oferta:()=>{dizTab='calc';goView('diz',()=>formOffer())},
@@ -1049,7 +1111,7 @@ const AS_ACTIONS={
 // [palavras-chave, resposta, botões [rótulo, ação|view]]
 const AS_KB=[
  [['13','decimo terceiro','13o','ferias','fgts','clt','carteira assinada','salario bruto','liquido','inss','imposto de renda','holerite'],'Na aba <b>Trabalho</b> o app calcula pela lei: salário líquido, 13º (1ª e 2ª parcela), férias + 1/3 e FGTS, e já coloca na previsão.',[['Abrir Trabalho','trab'],['Configurar CLT','clt']]],
- [['acordo','prestacao de servico','prestacao de servicos','servico','cliente','orcamento do cliente','freela','freelance','bico'],'Acordos de serviço ficam em <b>Trabalho</b>. Escreva o que combinou e o app monta os recebimentos e faz o balanço (imposto, custos, lucro, R$/hora).',[['Novo acordo','acordo']]],
+ [['acordo','combinado','combinei','patrao','sem carteira','prestacao de servico','prestacao de servicos','fim do ano','final do ano','gratificacao','bonus'],'O <b>acordo com o patrão</b> fica em <b>Trabalho</b>: escreva o que foi combinado (quanto paga, 13º, férias, bônus) e o app projeta quanto você recebe até o fim do ano e compara com a CLT.',[['Novo acordo','acordo'],['Abrir Trabalho','trab']]],
  [['entrada parcelada','entradas parceladas','parcelada','entrada','receber parcelado','recebo parcelado','receber em parcelas','vou receber','vendi parcelado','venda parcelada','me pagar parcelado','me devolver'],'Dinheiro que você vai <b>receber em parcelas</b> fica em <b>Parcelados → Entradas parceladas</b>. Abri o formulário: informe o valor total, nº de parcelas e o mês da 1ª.',[['Nova entrada parcelada','inParc']]],
  [['lancar gasto','gastei','gasto','despesa','comprei','compra','paguei','anotar gasto','registrar gasto'],'Gastos do dia a dia ficam em <b>Lançamentos</b>. Já abri o formulário: escolha <b>Gasto</b>, descrição, valor e categoria. Se foi no cartão de crédito, escolha o cartão e o valor vai para a fatura certa.',[['Novo gasto','gasto']]],
  [['recebi','entrada','receita','ganhei','renda extra','lancar entrada','pix recebido'],'Entradas avulsas ficam em <b>Lançamentos</b>. Abri o formulário já como <b>Entrada</b>.',[['Nova entrada','entrada']]],
@@ -1682,10 +1744,61 @@ function vTrab(){
   '<div class="muted" style="font-size:13px">Margem <b>'+Math.round(t.marg*100)+'%</b>'+(t.hora?' · você ganha <b>'+R(t.hora)+'/hora</b> ('+num(d.horas)+' h)':'')+(t.next?' · próximo recebimento: <b>'+R(t.next.val)+'</b> em '+String(t.next.day).padStart(2,'0')+'/'+t.next.m.slice(5,7)+'/'+t.next.m.slice(2,4)+' ('+t.next.lb+')':'')+'</div>'+
   '<details class="billd" style="margin-top:6px"><summary class="muted" style="cursor:pointer;font-size:13px">Ver cronograma ('+t.sc.length+')</summary><div class="items">'+t.sc.map(x=>'<div><span>'+String(x.day).padStart(2,'0')+'/'+x.m.slice(5,7)+'/'+x.m.slice(2,4)+' · '+x.lb+'</span><span class="mono">'+R(x.val)+'</span></div>').join('')+'</div></details>'+
   '<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editDeal" data-id="'+d.id+'">Editar</button>'+delBtn('deals',d.id)+'</div></section>'};
- return top('Trabalho','Salário, 13º, férias e serviços','<button class="btn primary" data-act="addDeal">+ Acordo de serviço</button>')+
- '<section class="card"><div class="hd"><h2>💼 Emprego CLT · pela lei</h2>'+(k?'<span class="chip good">ativo</span>':'')+'</div>'+clt+'</section>'+
- '<h2 style="margin:26px 0 6px">🤝 Acordos de prestação de serviço</h2><p class="muted" style="margin:0 0 12px;font-size:13px">Escreva o que foi combinado com o cliente. O app monta o cronograma de recebimentos, coloca nas previsões e faz o balanço: imposto, custos, lucro real e quanto você ganha por hora.</p>'+
- (ds.length?'<div class="grid g2">'+ds.map(dcard).join('')+'</div>':'<section class="card"><div class="empty">Nenhum acordo ainda. Toque em <b>+ Acordo de serviço</b>.</div></section>');
+ const js=S.jobs||[],fim=y+'-12';
+ const jcard=j0=>{const j={...j0,sal:true};const r=jobYear(j,CUR,fim,true),a=jobYear(j,y+'-01',fim),c=jobVsClt(j,y);
+  const lb13={int:'13º inteiro',metade:'13º pela metade',prop:'13º proporcional',nao:'sem 13º'}[j.t13||'nao'],lbF={terco:'férias pagas + 1/3',simples:'férias pagas (sem 1/3)',nao:'férias sem pagamento',nada:'férias não combinadas'}[j.fer||'nada'];
+  const ex=r.rows.flatMap(x=>x.it.filter(i=>!(i.k==='sal'||i.k==='var')).map(i=>'<div><span>'+mLabel(x.m)+' · '+esc(i.lb)+'</span><span class="mono '+(i.val<0?'neg':'')+'">'+R(i.val)+'</span></div>')).join('');
+  return '<section class="card pcard"><div class="top"><div style="min-width:0"><div class="nm">'+esc(j.patrao||'Trabalho')+'</div><div class="muted" style="font-size:13px">'+esc(j.func||'')+(j.func?' · ':'')+R(j.val)+'/mês · dia '+(j.day||5)+(num(j.desc)?' · desconto '+String(j.desc).replace('.',',')+'%':'')+'</div></div><span class="chip acc">'+lb13+'</span></div>'+
+  (j.text?'<div class="muted" style="font-size:13px;white-space:pre-wrap;border-left:3px solid var(--line);padding:4px 10px;margin:4px 0">'+esc(j.text)+'</div>':'')+
+  '<div class="muted" style="font-size:13px">'+lb13+' · '+lbF+(j.ferMonth&&j.fer!=='nada'?' em '+mLabel(j.ferMonth):'')+(num(j.bonus)?' · '+esc(j.bonusName||'bônus')+' '+R0(j.bonus)+' em '+mLabel(y+'-'+String(j.bonusMonth||12).padStart(2,'0')).split('/')[0]:'')+(num(j.extra)?' · extras ~'+R0(j.extra)+'/mês':'')+'</div>'+
+  '<div class="stats"><div><div class="lb">Até dez/'+String(y).slice(2)+' você recebe</div><div class="vl pos">'+R(r.tot)+'</div></div><div><div class="lb">Só de extras (13º, bônus…)</div><div class="vl">'+R(r.ext)+'</div></div><div><div class="lb">Total no ano '+y+'</div><div class="vl">'+R(a.tot)+'</div></div></div>'+
+  (ex?'<details class="billd" open><summary class="muted" style="cursor:pointer;font-size:13px">Extras previstos até o fim do ano</summary><div class="items">'+ex+'</div></details>':'')+
+  ((c.dif13>1||c.difFer>1)?'<div class="verdict warn" style="margin:6px 0 0;font-size:13px"><b>Se fosse CLT</b>, pela lei você teria a mais em '+y+': '+(c.dif13>1?'13º '+R0(c.dif13)+' · ':'')+(c.difFer>1?'1/3 de férias '+R0(c.difFer)+' · ':'')+'FGTS '+R0(c.fgts)+'. Bom saber na hora de negociar.</div>':'<div class="verdict good" style="margin:6px 0 0;font-size:13px">Esse acordo cobre o 13º e as férias que a CLT daria (sem contar FGTS de '+R0(c.fgts)+').</div>')+
+  (j0.sal===false?'<div class="muted" style="font-size:12px">O pagamento mensal não foi colocado na previsão (você já tem o salário em Fixas). 13º, férias e bônus entram.</div>':'')+'<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editJob" data-id="'+j.id+'">Editar</button>'+delBtn('jobs',j.id)+'</div></section>'};
+ const tot=js.reduce((a,j)=>a+jobYear({...j,sal:true},CUR,fim,true).tot,0)+(k?(()=>{let s=0;for(let m=CUR;diffM(m,fim)>=0;m=addM(m,1))s+=(m===CUR?0:k.mes.net)+extraIn(m).filter(x=>x.key.indexOf(':clt:')>0).reduce((a,x)=>a+x.val,0);return s})():0);
+ return top('Trabalho','Salário, 13º, férias e acordos','<button class="btn primary" data-act="addJob">+ Acordo com patrão</button>')+
+ (js.length||k?'<section class="card hero" style="margin-bottom:16px"><div class="kpi"><div class="lb">Projeção até o fim de '+y+' · do seu trabalho</div></div><div class="big">'+R(tot)+'</div><div class="muted" style="margin-top:6px;font-size:14px">É o que ainda vai entrar de '+mLabel(CUR)+' até dezembro, contando salário, 13º, férias e bônus combinados.</div><div style="margin-top:12px"><button class="btn sm" data-act="projDez">🔮 Ver como fico em dezembro</button></div></section>':'')+
+ '<h2 style="margin:6px 0 6px">🤝 Acordo com o patrão</h2><p class="muted" style="margin:0 0 12px;font-size:13px">Para quem trabalha <b>sem carteira</b> ou com combinado próprio. Escreva o que foi acordado com o patrão (quanto paga, dia, se paga 13º, férias, bônus, descontos). O app monta a previsão até o fim do ano e compara com o que a CLT daria.</p>'+
+ (js.length?'<div class="grid g2">'+js.map(jcard).join('')+'</div>':'<section class="card"><div class="empty">Nenhum acordo ainda. Toque em <b>+ Acordo com patrão</b>.</div></section>')+
+ '<section class="card" style="margin-top:22px"><div class="hd"><h2>💼 Emprego CLT · pela lei</h2>'+(k?'<span class="chip good">ativo</span>':'')+'</div>'+clt+'</section>'+
+ (ds.length?'<h2 style="margin:26px 0 12px">🧾 Serviços para clientes</h2><div class="grid g2">'+ds.map(dcard).join('')+'</div>':'');
+}
+
+function formJob(j){
+ const hasSal=S.rec.some(r=>r.type==='in'&&(r.cat==='Salário'));
+ j=j||{patrao:'',func:'',text:'',val:'',day:5,start:'',end:'',t13:'prop',t13Split:false,fer:'simples',ferMonth:'',bonus:'',bonusName:'',bonusMonth:12,extra:'',desc:0,sal:!hasSal};
+ const mo=[1,2,3,4,5,6,7,8,9,10,11,12].map(i=>'<option value="'+i+'"'+(+j.bonusMonth===i?' selected':'')+'>'+mLabel(CUR.slice(0,4)+'-'+String(i).padStart(2,'0'),true).split(' ')[0]+'</option>').join('');
+ const sel=(n,o,v)=>'<select name="'+n+'">'+o.map(([k,l])=>'<option value="'+k+'"'+(k===v?' selected':'')+'>'+l+'</option>').join('')+'</select>';
+ openSheet(j.id?'Editar acordo':'Acordo com o patrão','<div class="form">'+
+  '<label class="f full">O que foi combinado (escreva do seu jeito)<textarea name="text" rows="4" placeholder="Ex.: Combinei com o pastor R$ 2.000 por mês, pago todo dia 5. Ele paga 13º proporcional em dezembro, férias em janeiro sem o 1/3 e uma gratificação de R$ 500 no Natal. Desconto de 11% de INSS.">'+esc(j.text||'')+'</textarea></label>'+
+  '<div class="full"><button type="button" class="btn sm" id="jobParse">✨ Preencher a partir do texto</button> <span class="muted" style="font-size:12.5px" id="jobParseMsg"></span></div>'+
+  '<label class="f">Patrão / empresa<input name="desc" value="'+esc(j.patrao)+'" placeholder="Ex.: Igreja Central"></label>'+
+  '<label class="f">Função (opcional)<input name="func" value="'+esc(j.func||'')+'" placeholder="Ex.: Sonoplasta"></label>'+
+  '<label class="f">Quanto recebe por mês (R$)<input name="val" type="number" inputmode="decimal" min="0" step="0.01" value="'+(j.val||'')+'"></label>'+
+  '<label class="f">Dia do pagamento<input name="day" type="number" inputmode="numeric" min="1" max="31" value="'+(j.day||5)+'"></label>'+
+  '<label class="f">Começou em<input name="start" type="month" value="'+(j.start||'')+'"></label>'+
+  '<label class="f">Termina em (se tiver data)<input name="end" type="month" value="'+(j.end||'')+'"></label>'+
+  '<label class="f">13º salário'+sel('t13',[['int','Paga inteiro'],['prop','Paga proporcional aos meses'],['metade','Paga metade'],['nao','Não paga 13º']],j.t13||'nao')+'</label>'+
+  '<label class="f" style="flex-direction:row;align-items:center;gap:8px;align-self:end"><input name="t13Split" type="checkbox" style="width:auto"'+(j.t13Split?' checked':'')+'> 13º em 2 vezes (nov. e dez.)</label>'+
+  '<label class="f">Férias'+sel('fer',[['terco','Pagas com 1/3 a mais'],['simples','Pagas normal (sem 1/3)'],['nao','Sem pagamento (fico sem receber)'],['nada','Não combinamos férias']],j.fer||'nada')+'</label>'+
+  '<label class="f">Mês das férias<input name="ferMonth" type="month" value="'+(j.ferMonth||'')+'"></label>'+
+  '<label class="f">Bônus / gratificação (R$)<input name="bonus" type="number" inputmode="decimal" min="0" step="0.01" value="'+(j.bonus||'')+'" placeholder="Ex.: cesta ou ajuda de Natal"></label>'+
+  '<label class="f">Mês do bônus (todo ano)<select name="bonusMonth">'+mo+'</select></label>'+
+  '<label class="f">Extras/comissão por mês, média (R$)<input name="extra" type="number" inputmode="decimal" min="0" step="0.01" value="'+(j.extra||'')+'"></label>'+
+  '<label class="f">Descontos combinados (%)<input name="pct" type="number" inputmode="decimal" min="0" max="100" step="0.01" value="'+(j.desc||0)+'" placeholder="INSS, imposto…"></label>'+
+  '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="sal" type="checkbox" style="width:auto"'+(j.sal!==false?' checked':'')+'> Colocar o pagamento mensal na previsão '+(hasSal?'<span class="muted">(desmarque se já cadastrou esse salário em Fixas)</span>':'')+'</label>'+
+  '<p class="muted full" id="jobPrev" style="margin:0;font-size:13px"></p></div>',f=>{
+  if(!need(f,['desc','val']))return false;
+  upsert('jobs',{id:j.id||uid(),patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),start:f.start.value||'',end:f.end.value||'',t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked});commit('Acordo salvo');});
+ const f=document.getElementById('sheetForm');
+ const cur=()=>({val:num(f.val.value),day:num(f.day.value),start:f.start.value,end:f.end.value,t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value,bonus:num(f.bonus.value),bonusMonth:+f.bonusMonth.value,bonusName:j.bonusName,extra:num(f.extra.value),desc:num(f.pct.value),sal:true,patrao:f.desc.value});
+ const prev=()=>{const x=cur();if(!x.val){document.getElementById('jobPrev').innerHTML='Informe quanto recebe por mês.';return}const y=+CUR.slice(0,4);const r=jobYear(x,CUR,y+'-12',true);const c=jobVsClt(x,y);
+  document.getElementById('jobPrev').innerHTML='Até dezembro: <b class="mono">'+R(r.tot)+'</b> (mensal '+R0(r.sal)+' + extras '+R0(r.ext)+') · 13º previsto: <b>'+R0(jobNet(x,job13(x,y)))+'</b>'+((c.dif13>1||c.difFer>1)?' · pela CLT seria +'+R0(c.dif13+c.difFer)+' e FGTS '+R0(c.fgts):'')};
+ f.addEventListener('input',prev);f.addEventListener('change',prev);prev();
+ document.getElementById('jobParse').onclick=()=>{const r=parseJob(f.text.value);let n=0;
+  const set=(k,v)=>{if(v==null||v==='')return;const el=f[k];if(!el)return;if(el.type==='checkbox')el.checked=!!v;else el.value=v;n++};
+  set('val',r.val);set('day',r.day);set('t13',r.t13);if(r.t13Split)set('t13Split',true);set('fer',r.fer);set('ferMonth',r.ferMonth);set('bonus',r.bonus);set('bonusMonth',r.bonusMonth);set('extra',r.extra);set('pct',r.desc);set('start',r.start);if(r.bonusName)j.bonusName=r.bonusName;
+  document.getElementById('jobParseMsg').textContent=n?'Preenchi '+n+' campo'+(n>1?'s':'')+'. Confira abaixo.':'Não entendi valores no texto. Preencha os campos abaixo.';prev()};
 }
 function formClt(){
  const c=S.clt||{bruto:'',adm:'',dep:0,fer:'',ferDay:1,ferAdj:true,fgts:'',emp:'',on13:true};
@@ -1812,6 +1925,9 @@ document.addEventListener('click',e=>{
  else if(a==='editClt')formClt();
  else if(a==='cltOff'){if(S.clt){S.clt.on=false;S.demo=false;commit('CLT desligado')}}
  else if(a==='addDeal')formDeal();
+ else if(a==='addJob')formJob();
+ else if(a==='editJob')formJob({...find('jobs',id)});
+ else if(a==='projDez'){projMonth=CUR.slice(0,4)+'-12';if(projMonth===CUR)projMonth=addM(CUR,1);view='painel';render();setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},50)}
  else if(a==='editDeal')formDeal({...find('deals',id)});
  else if(a==='goTrab'){view='trab';render();window.scrollTo(0,0)}
  else if(a==='editInIn')formInIn({...find('instIn',id)});
