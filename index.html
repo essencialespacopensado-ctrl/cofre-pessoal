@@ -258,6 +258,7 @@ svg text{font-family:var(--f-mono)}
 @media (prefers-reduced-motion:no-preference){.view{animation:in .35s ease}@keyframes in{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}}
 .projm{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;color-scheme:dark}:root[data-theme=light] .projm{color-scheme:light}@media(max-width:600px){.ptab td,.ptab th{padding:7px 6px;font-size:12.5px}}
 .ptab{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}.ptab th{position:sticky;top:0;background:var(--panel);text-align:right;font-weight:600;color:var(--muted);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--line)}.ptab th:first-child,.ptab td:first-child{text-align:left}.ptab td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}.ptab tr.cur td{background:color-mix(in srgb,var(--accent) 8%,transparent)}.ptab .pos{color:var(--good)}.ptab .neg{color:var(--bad)}
+.form textarea{width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;resize:vertical}
 </style>
 </head>
 <body>
@@ -289,12 +290,13 @@ const ICONS = {
  dicas:'<path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V16h8v-1.3A7 7 0 0012 2z"/>',
  orc:'<path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/>',
  pagar:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 12"/>',
- dev:'<path d="M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/>'
+ dev:'<path d="M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/>',
+ trab:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M3 13h18"/>'
 };
 const APP_URL=location.origin+location.pathname.replace(/index\.html$/,'');
 ICONS.estudo='<path d="M4 4h6a3 3 0 013 3v13a2 2 0 00-2-2H4zM20 4h-6a3 3 0 00-3 3v13a2 2 0 012-2h7z"/>';
 ICONS.diz='<path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z"/>';
-const VIEWS=[['painel','Painel'],['pagar','A pagar'],['lanc','Lançamentos'],['fixas','Fixas'],['orc','Orçamento'],['parc','Parcelados'],['metas','Metas'],['sim','Simulador'],['dicas','Dicas'],['diz','Dízimos'],['dev','Sugestões'],['admin','Desenvolvedor']];
+const VIEWS=[['painel','Painel'],['pagar','A pagar'],['lanc','Lançamentos'],['fixas','Fixas'],['trab','Trabalho'],['orc','Orçamento'],['parc','Parcelados'],['metas','Metas'],['sim','Simulador'],['dicas','Dicas'],['diz','Dízimos'],['dev','Sugestões'],['admin','Desenvolvedor']];
 ICONS.share='<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>';
 ICONS.admin='<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>';
 const BUDGET={
@@ -381,6 +383,7 @@ function receipts(m){
  const out=[],td=TODAY.getDate(),g=S.got||{};
  S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>out.push({key:m+':rin:'+r.id,kind:'Entrada fixa',name:r.desc,from:r.from||'',day:r.day||1,val:num(r.val)}));
  (S.instIn||[]).filter(i=>inInMonth(i,m)).forEach(i=>out.push({key:m+':ini:'+i.id,kind:'Entrada parcelada '+(diffM(i.first,m)+1)+'/'+i.n,name:i.desc,from:i.from||'',day:i.day||10,val:inParcel(i)}));
+ extraIn(m).forEach(r=>out.push(r));
  S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m).forEach(t=>out.push({key:'tx:'+t.id,kind:'Entrada avulsa',name:t.desc,from:'',day:+t.date.slice(8,10)||1,val:num(t.val),tx:true}));
  out.forEach(r=>{const d=diffM(m,CUR);r.auto=d>0||(d===0&&r.day<=td);r.got=g[r.key]!=null?!!g[r.key]:r.auto});
  return out.sort((a,b)=>a.day-b.day);
@@ -390,6 +393,53 @@ function balanceAt(m){
  const ini=S.initial;if(!ini||!ini.month)return null;
  if(diffM(ini.month,m)<0)return num(ini.val);
  let b=num(ini.val);for(let k=ini.month;diffM(k,m)>=0;k=addM(k,1))b+=month(k).saldo-(diffM(k,CUR)<=0?pendingIn(k):0);return b;
+}
+
+/* ===== Trabalho: CLT pela lei (2026) e acordos de serviço ===== */
+const INSS26=[[1621.00,.075],[2902.84,.09],[4354.27,.12],[8475.55,.14]];
+function inssCalc(b){b=Math.max(0,num(b));let t=0,prev=0;for(const [lim,a] of INSS26){if(b>prev){t+=(Math.min(b,lim)-prev)*a}prev=lim}return Math.round(t*100)/100}
+function irCalc(gross,inss,dep){ // IRRF mensal 2026 + redutor Lei 15.270/2025
+ gross=num(gross);const ded=Math.max(num(inss)+num(dep)*189.59,607.20);const base=Math.max(0,gross-ded);
+ const T=[[2428.80,0,0],[2826.65,.075,182.16],[3751.05,.15,394.16],[4664.68,.225,675.49],[1e12,.275,908.73]];
+ let ir=0;for(const [lim,a,d] of T){if(base<=lim){ir=base*a-d;break}}ir=Math.max(0,ir);
+ if(gross<=5000)ir=Math.max(0,ir-312.89);else if(gross<=7350)ir=Math.max(0,ir-Math.max(0,978.62-0.133145*gross));
+ return Math.round(ir*100)/100;
+}
+function cltNet(gross,dep){const i=inssCalc(gross),r=irCalc(gross,i,dep);return {gross:num(gross),inss:i,ir:r,net:num(gross)-i-r}}
+function cltCalc(y){ // valores do ano y
+ const c=S.clt;if(!c||!c.on||!num(c.bruto))return null;
+ const b=num(c.bruto),dep=num(c.dep),adm=c.adm||'2000-01';
+ let avos=12;if(adm.slice(0,4)===String(y))avos=12-(+adm.slice(5,7))+1;if(+adm.slice(0,4)>y)avos=0;
+ const t13=b*avos/12,p1=t13/2,i13=inssCalc(t13),r13=irCalc(t13,i13,dep),p2=t13-p1-i13-r13;
+ const fb=b+b/3,fi=inssCalc(fb),fr=irCalc(fb,fi,dep);
+ return {b,avos,t13,p1,p2,i13,r13,fer:{gross:fb,inss:fi,ir:fr,net:fb-fi-fr,terco:b/3},mes:cltNet(b,dep),fgts:b*.08};
+}
+function extraIn(m){
+ const out=[];const y=+m.slice(0,4),mm=m.slice(5,7);const c=S.clt;
+ const k=cltCalc(y);
+ if(k&&k.avos>0){
+  if(mm==='11'&&c.on13!==false)out.push({key:m+':clt:13a',work:1,kind:'13º salário · 1ª parcela',name:'13º salário (1ª parcela)',from:c.emp||'',day:30,val:k.p1});
+  if(mm==='12'&&c.on13!==false)out.push({key:m+':clt:13b',work:1,kind:'13º salário · 2ª parcela (com descontos)',name:'13º salário (2ª parcela)',from:c.emp||'',day:20,val:k.p2});
+ }
+ if(k&&c.fer&&c.fer===m){out.push({key:m+':clt:fer',work:1,kind:'Férias + 1/3 (líquido)',name:'Férias',from:c.emp||'',day:Math.max(1,num(c.ferDay||1)),val:k.fer.net});}
+ if(k&&c.fer&&c.ferAdj!==false&&addM(c.fer,1)===m){out.push({key:m+':clt:feradj',work:1,kind:'Ajuste: salário do mês de férias já veio junto com as férias',name:'Ajuste de férias',from:'',day:5,val:-k.mes.net});}
+ (S.deals||[]).forEach(d=>dealSched(d).filter(x=>x.m===m).forEach(x=>out.push({key:m+':acd:'+d.id+':'+x.k,work:1,kind:'Acordo · '+x.lb,name:d.cli||'Serviço',from:d.cli||'',day:x.day,val:x.val})));
+ return out;
+}
+function extraOut(m){
+ const out=[];(S.deals||[]).forEach(d=>{const p=num(d.tax)/100;if(!p)return;dealSched(d).filter(x=>x.m===m).forEach(x=>out.push({day:x.day,name:'Imposto · '+(d.cli||'serviço'),kind:'Imposto do acordo ('+String(d.tax).replace('.',',')+'%)',val:x.val*p}))});
+ return out;
+}
+function dealSched(d){ // parcelas do acordo: entrada + N parcelas mensais
+ const out=[];const total=num(d.total),ent=Math.min(total,num(d.ent)),n=Math.max(0,Math.round(num(d.n)));
+ if(ent>0&&d.entDate)out.push({k:'e',lb:'entrada',m:d.entDate.slice(0,7),day:+d.entDate.slice(8,10)||1,val:ent});
+ const rest=total-ent;if(rest>0.004){const nn=Math.max(1,n),v=rest/nn;for(let j=0;j<nn;j++)out.push({k:'p'+j,lb:'parcela '+(j+1)+'/'+nn,m:addM(d.first||CUR,j),day:num(d.day)||10,val:v})}
+ return out;
+}
+function dealStatus(d){
+ const sc=dealSched(d);const g=S.got||{};const got=x=>{const key=x.m+':acd:'+d.id+':'+x.k;if(g[key]!=null)return !!g[key];const dd=diffM(x.m,CUR);return dd>0||(dd===0&&x.day<=TODAY.getDate())};
+ const rec=sc.filter(got).reduce((a,x)=>a+x.val,0),total=num(d.total),tax=total*num(d.tax)/100,cost=num(d.cost),lucro=total-tax-cost;
+ const nx=sc.find(x=>!got(x));return {sc,rec,falta:total-rec,tax,cost,lucro,marg:total?lucro/total:0,hora:num(d.horas)?lucro/num(d.horas):0,next:nx};
 }
 /* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
 let projMonth=null;
@@ -482,8 +532,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.5';
+const APP_VERSION='2.6';
 const CHANGELOG=[
+ ['2.6','12/10/2026',['Nova aba Trabalho: CLT pela lei 2026 (líquido, 13º, férias + 1/3, FGTS) entrando na previsão.','Acordos de prestação de serviço: escreva o combinado, o app monta os recebimentos e faz o balanço (imposto, custos, lucro, R$/hora).','A pagar mostra só o mês atual; meses futuros ficam em Lançamentos.']],
  ['2.5','12/10/2026',['Lançamentos: cada mês (inclusive os futuros) mostra o salário, as contas fixas e as parcelas previstas.']],
  ['2.4','12/10/2026',['Entradas parceladas: "Falta receber" só desconta a parcela depois que ela cai.','Painel: "Como vou estar em…" — escolha mês e ano e veja o saldo previsto, com projeção mês a mês.','Painel: previsão do que entra no próximo mês (salário e parcelas).']],
  ['2.3','12/10/2026',['Resumo do link compartilhado atualizado (sem dízimo).']],
@@ -627,8 +678,9 @@ function inStatus(i){const p=inParcel(i),k=diffM(i.first,CUR);const flags=Array.
 function recActive(r,m){return !r.start||diffM(r.start,m)>=0}
 function month(m){
  const inParc=(S.instIn||[]).filter(i=>inInMonth(i,m)).reduce((a,i)=>a+inParcel(i),0);
- const inFix=S.rec.filter(r=>r.type==='in'&&recActive(r,m)).reduce((a,r)=>a+num(r.val),0)+inParc;
- const outFix=S.rec.filter(r=>r.type==='out'&&recActive(r,m)).reduce((a,r)=>a+num(r.val),0);
+ const inExtra=extraIn(m).reduce((a,r)=>a+r.val,0),outExtra=extraOut(m).reduce((a,r)=>a+r.val,0);
+ const inFix=S.rec.filter(r=>r.type==='in'&&recActive(r,m)).reduce((a,r)=>a+num(r.val),0)+inParc+inExtra;
+ const outFix=S.rec.filter(r=>r.type==='out'&&recActive(r,m)).reduce((a,r)=>a+num(r.val),0)+outExtra;
  const parc=S.inst.filter(i=>instInMonth(i,m)).reduce((a,i)=>a+instParcel(i),0);
  const txs=S.tx.filter(t=>t.date&&t.date.slice(0,7)===m);
  const inVar=txs.filter(t=>t.type==='in').reduce((a,t)=>a+num(t.val),0);
@@ -669,7 +721,7 @@ function buildNav(){
  setSync(syncState);
 }
 function render(){
- S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};
+ S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};S.deals=S.deals||[];S.clt=S.clt||null;
  const main=document.getElementById('main');
  document.body.classList.toggle('locked',locked||(ACCESS!=='ok'&&!ME.owner));
  if(ACCESS!=='ok'&&!ME.owner){main.innerHTML=vBlocked();return}
@@ -677,7 +729,7 @@ function render(){
  if(!S.termsAt){main.innerHTML=vTermsGate();return}
  if(view==='admin'&&!ME.owner)view='painel';
  buildNav();
- const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
+ const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,trab:vTrab,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
  const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+asBar()+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
@@ -785,17 +837,18 @@ function vLanc(){
  '<section class="card"><div class="hd"><div class="monthnav"><button class="btn sm ghost" data-act="mPrev" aria-label="Mês anterior">‹</button><h2 style="min-width:150px;text-align:center">'+mLabel(lancMonth,true)+'</h2><button class="btn sm ghost" data-act="mNext" aria-label="Próximo mês">›</button></div>'+
  '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip good" title="Total de entradas do mês">+ '+R(x.entradas)+'</span><span class="chip bad" title="Total de saídas do mês">− '+R(x.saidas)+'</span></div></div>'+
  '<div class="list">'+(list.length?list.map(t=>txRow(t)).join(''):'<div class="empty">Nada lançado em '+mLabel(lancMonth,true)+'. Toque em <b>Novo lançamento</b> para começar.</div>')+'</div>'+
- '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Aqui em cima ficam os gastos e entradas avulsos que você lançou.</p></section>'+autoSec(lancMonth);
+ '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Aqui ficam os gastos e entradas avulsos que você lançou.'+(diffM(CUR,lancMonth)<=0?' Contas fixas, parcelas e salário deste mês estão em <a href="#" data-go="pagar" style="color:var(--accent)">A pagar</a>. Use <b>›</b> para ver os meses futuros.':'')+'</p></section>'+(diffM(CUR,lancMonth)>0?autoSec(lancMonth):'');
 }
 function autoSec(m){
  const it=[];const fut=diffM(CUR,m)>0;
- receipts(m).filter(r=>!r.tx).forEach(r=>{const id=r.key.split(':')[2];it.push({day:r.day,name:r.name,kind:r.kind+(r.from?' · de '+r.from:''),val:r.val,inn:true,st:r.got?['good','Recebido']:['acc','Previsto'],act:r.key.indexOf(':ini:')>0?'editInIn':'editRec',id})});
+ receipts(m).filter(r=>!r.tx).forEach(r=>{const id=r.key.split(':')[2];it.push({day:r.day,name:r.name,kind:r.kind+(r.from?' · de '+r.from:''),val:r.val,inn:r.val>=0,st:r.got?['good','Recebido']:['acc','Previsto'],act:r.work?'goTrab':r.key.indexOf(':ini:')>0?'editInIn':'editRec',id})});
+ extraOut(m).forEach(r=>it.push({day:r.day,name:r.name,kind:r.kind,val:r.val,inn:false,st:['acc','Previsto'],act:'goTrab',id:''}));
  S.rec.filter(r=>r.type==='out'&&recActive(r,m)).forEach(r=>it.push({day:r.day||1,name:r.desc,kind:'Conta fixa'+(cardById(r.cardId)?' · cartão '+cardById(r.cardId).name:''),val:num(r.val),inn:false,st:fut?['acc','Previsto']:['','Fixa'],act:'editRec',id:r.id}));
  S.inst.filter(i=>instInMonth(i,m)).forEach(i=>it.push({day:i.day||10,name:i.desc,kind:'Parcela '+(diffM(i.first,m)+1)+'/'+i.n+(cardById(i.cardId)?' · cartão '+cardById(i.cardId).name:''),val:instParcel(i),inn:false,st:fut?['acc','Previsto']:['','Parcela'],act:'editInst',id:i.id}));
  it.sort((a,b)=>a.day-b.day);
  const ti=it.filter(x=>x.inn).reduce((a,x)=>a+x.val,0),to=it.filter(x=>!x.inn).reduce((a,x)=>a+x.val,0);
  return '<section class="card" style="margin-top:16px"><div class="hd"><h2>'+(fut?'🔮 Previstos para ':'🔁 Automáticos de ')+mLabel(m,true)+'</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip good">+ '+R(ti)+'</span><span class="chip bad">− '+R(to)+'</span></div></div>'+
-  '<div class="list">'+(it.length?it.map(x=>'<div class="row"><div class="ic '+(x.inn?'in':'out')+'">'+String(x.day).padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(x.name)+'</div><div class="s">'+esc(x.kind)+' · dia '+String(x.day).padStart(2,'0')+'/'+m.slice(5,7)+'</div></div><div class="v '+(x.inn?'pos':'')+'">'+(x.inn?'+':'−')+R(x.val)+'</div><div class="del" style="display:flex;gap:6px;align-items:center">'+(x.st[0]?'<span class="chip '+x.st[0]+'">'+x.st[1]+'</span>':'<span class="chip">'+x.st[1]+'</span>')+'<button class="btn sm ghost" data-act="'+x.act+'" data-id="'+x.id+'">Editar</button></div></div>').join(''):'<div class="empty">Nenhuma conta fixa, salário ou parcela neste mês.</div>')+'</div>'+
+  '<div class="list">'+(it.length?it.map(x=>'<div class="row"><div class="ic '+(x.inn?'in':'out')+'">'+String(x.day).padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(x.name)+'</div><div class="s">'+esc(x.kind)+' · dia '+String(x.day).padStart(2,'0')+'/'+m.slice(5,7)+'</div></div><div class="v '+(x.inn?'pos':'')+'">'+(x.inn?'+':'−')+R(Math.abs(x.val))+'</div><div class="del" style="display:flex;gap:6px;align-items:center">'+(x.st[0]?'<span class="chip '+x.st[0]+'">'+x.st[1]+'</span>':'<span class="chip">'+x.st[1]+'</span>')+'<button class="btn sm ghost" data-act="'+x.act+'" data-id="'+x.id+'">Editar</button></div></div>').join(''):'<div class="empty">Nenhuma conta fixa, salário ou parcela neste mês.</div>')+'</div>'+
   '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Salário, contas fixas e parcelas (compras e entradas) entram sozinhos todo mês. Para mudar, toque em <b>Editar</b> ou vá em <b>Fixas</b> / <b>Parcelados</b>.</p></section>';
 }
 function txRow(t){
@@ -838,13 +891,13 @@ function billRow(b,m){
  return '<details class="billd"><summary class="row">'+head+'</summary><div class="items">'+b.items.map(x=>'<div><span>'+esc(x[0])+'</span><span class="mono">'+R(x[1])+'</span></div>').join('')+'<div class="muted" style="font-size:12px">Fecha dia '+b.close+' · compras a partir desse dia vão para a próxima fatura.</div></div></details>';
 }
 function vPagar(){
- const m=pagarMonth,list=bills(m);
+ pagarMonth=CUR;const m=CUR,list=bills(m);
  const tot=list.reduce((a,b)=>a+b.val,0),pago=list.filter(b=>b.paid).reduce((a,b)=>a+b.val,0);
  const next=list.find(b=>!b.paid&&(m!==CUR||b.day>=TODAY.getDate()));
  const late=m===CUR?list.filter(b=>!b.paid&&b.day<TODAY.getDate()):[];
  const cards=S.cards.map(c=>{const f=bills(CUR).find(b=>b.key===CUR+':card:'+c.id);const fn=bills(addM(CUR,1)).find(b=>b.key===addM(CUR,1)+':card:'+c.id);
   return '<div class="row"><div class="ic" style="color:var(--accent)">'+icon('parc')+'</div><div style="min-width:0"><div class="t">'+esc(c.name)+'</div><div class="s">Fecha dia '+c.close+' · vence dia '+c.due+' · melhor dia de compra: '+c.close+'</div></div><div class="v" style="text-align:right">'+R(f?f.val:0)+'<div class="s" style="font-weight:400">próxima: '+R0(fn?fn.val:0)+'</div></div><div class="del" style="display:flex;gap:4px"><button class="btn sm ghost" data-act="editCard" data-id="'+c.id+'">Editar</button>'+delBtn('cards',c.id)+'</div></div>'}).join('');
- return top('Contas a pagar · '+mLabel(m,true),'O que pagar, para quem e quando','<div class="monthnav"><button class="btn sm ghost" data-act="pPrev" aria-label="Mês anterior">‹</button><span class="mono" style="min-width:64px;text-align:center">'+mLabel(m)+'</span><button class="btn sm ghost" data-act="pNext" aria-label="Próximo mês">›</button></div>')+
+ return top('Contas a pagar · '+mLabel(m,true),'O que pagar este mês','<button class="btn sm" data-go="lanc" data-lm="next">Ver meses futuros ›</button>')+
  '<div class="grid g4" style="margin-bottom:16px">'+kpi('Total do mês',R(tot),list.length+' pagamento'+(list.length===1?'':'s'),'')+kpi('Já pago',R(pago),Math.round(tot?pago/tot*100:0)+'% concluído','pos')+kpi('Falta pagar',R(tot-pago),late.length?late.length+' atrasada'+(late.length>1?'s':''):'nada atrasado',late.length?'neg':'')+
   kpi('Próximo vencimento',next?String(next.day).padStart(2,'0')+'/'+m.slice(5,7):'—',next?esc(next.name)+' · '+R0(next.val):'tudo pago','acc')+'</div>'+
  '<div class="grid g32"><section class="card"><div class="hd"><h2>Pagamentos do mês</h2><div class="bar" style="width:140px"><i style="width:'+(tot?pago/tot*100:0)+'%"></i></div></div><div class="list">'+(list.length?list.map(b=>billRow(b,m)).join(''):'<div class="empty">Nada para pagar em '+mLabel(m,true)+'.</div>')+'</div>'+
@@ -978,6 +1031,9 @@ const AS_ACTIONS={
  cartao:()=>goView('pagar',()=>formCard()),
  parcela:()=>goView('parc',()=>formInst()),
  inParc:()=>goView('parc',()=>formInIn()),
+ clt:()=>goView('trab',()=>formClt()),
+ trab:()=>goView('trab'),
+ acordo:()=>goView('trab',()=>formDeal()),
  meta:()=>goView('metas',()=>formGoal()),
  saldoIni:()=>goView('fixas',()=>formInit()),
  oferta:()=>{dizTab='calc';goView('diz',()=>formOffer())},
@@ -992,6 +1048,8 @@ const AS_ACTIONS={
 };
 // [palavras-chave, resposta, botões [rótulo, ação|view]]
 const AS_KB=[
+ [['13','decimo terceiro','13o','ferias','fgts','clt','carteira assinada','salario bruto','liquido','inss','imposto de renda','holerite'],'Na aba <b>Trabalho</b> o app calcula pela lei: salário líquido, 13º (1ª e 2ª parcela), férias + 1/3 e FGTS, e já coloca na previsão.',[['Abrir Trabalho','trab'],['Configurar CLT','clt']]],
+ [['acordo','prestacao de servico','prestacao de servicos','servico','cliente','orcamento do cliente','freela','freelance','bico'],'Acordos de serviço ficam em <b>Trabalho</b>. Escreva o que combinou e o app monta os recebimentos e faz o balanço (imposto, custos, lucro, R$/hora).',[['Novo acordo','acordo']]],
  [['entrada parcelada','entradas parceladas','parcelada','entrada','receber parcelado','recebo parcelado','receber em parcelas','vou receber','vendi parcelado','venda parcelada','me pagar parcelado','me devolver'],'Dinheiro que você vai <b>receber em parcelas</b> fica em <b>Parcelados → Entradas parceladas</b>. Abri o formulário: informe o valor total, nº de parcelas e o mês da 1ª.',[['Nova entrada parcelada','inParc']]],
  [['lancar gasto','gastei','gasto','despesa','comprei','compra','paguei','anotar gasto','registrar gasto'],'Gastos do dia a dia ficam em <b>Lançamentos</b>. Já abri o formulário: escolha <b>Gasto</b>, descrição, valor e categoria. Se foi no cartão de crédito, escolha o cartão e o valor vai para a fatura certa.',[['Novo gasto','gasto']]],
  [['recebi','entrada','receita','ganhei','renda extra','lancar entrada','pix recebido'],'Entradas avulsas ficam em <b>Lançamentos</b>. Abri o formulário já como <b>Entrada</b>.',[['Nova entrada','entrada']]],
@@ -1040,6 +1098,7 @@ function asAnswer(raw){
  const web=/^ ?(pesquis|procur|busca|google|na internet|o que e |o que significa|como funciona|cotacao|taxa selic|quanto esta o|preco d)/.test(q)||q.includes(' na internet ');
  if(!web){const d=asData(q);if(d)return d}
  let best=null,score=0;
+ if(!web&&/ (13|13o|decimo|ferias|fgts|clt|inss|holerite) /.test(q.replace(/[^a-z0-9 ]/g,' '))){const k=AS_KB.find(x=>x[0][0]==='13');let msg=k[1];const c=cltCalc(+CUR.slice(0,4));if(c)msg='Pela lei (tabelas 2026): <b>13º</b> '+R(c.p1+c.p2)+' (1ª '+R(c.p1)+' em 30/11, 2ª '+R(c.p2)+' em 20/12) · <b>férias + 1/3</b> líquidas '+R(c.fer.net)+' · <b>FGTS</b> '+R(c.fgts)+'/mês · líquido mensal '+R(c.mes.net)+'.';return [msg,k[2],true]}
  if(!web)AS_KB.forEach(k=>{let s=0;k[0].forEach(w=>{if(q.includes(' '+w)||q.includes(w+' ')||q.includes(w))s+=w.length>5?2:1});if(s>score){score=s;best=k}});
  if(best&&score>0){if(best[0][0]==='usuarios'&&!ME.owner)best=AS_KB.find(k=>k[0][0]==='manual');return [best[1],best[2],true]}
  const term=raw.replace(/^(pesquis(e|ar|a)|procur(e|ar|a)|busc(a|ar|que)|google)\s*(na internet|no google)?\s*(sobre|por)?\s*/i,'').trim()||raw;
@@ -1590,6 +1649,105 @@ function formInIn(i){
  const prev=()=>{const n=Math.max(1,Math.round(num(f.n.value)));const t=num(f.total.value);document.getElementById('inPrev').innerHTML=t?'Parcela: <b class="mono">'+R(t/n)+'</b> por mês · última em <b>'+mLabel(addM(f.first.value||CUR,n-1),true)+'</b>':'Informe o valor para ver a parcela.'};
  f.addEventListener('input',prev);prev();
 }
+
+/* ===== Tela Trabalho ===== */
+function vTrab(){
+ const c=S.clt,y=+CUR.slice(0,4),k=cltCalc(y),k2=cltCalc(y+1);
+ const row=(l,v,cls,s)=>'<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><div style="min-width:0"><div class="t">'+l+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div><div class="v '+(cls||'')+'">'+v+'</div></div>';
+ let clt='';
+ if(!k){clt='<div class="empty" style="text-align:left">Se você é <b>CLT</b> (carteira assinada), informe seu salário bruto e a data de admissão. O app calcula pela lei o seu <b>salário líquido</b>, <b>13º</b> (1ª e 2ª parcela), <b>férias + 1/3</b> e o <b>FGTS</b>, e coloca tudo na previsão.</div><div style="margin-top:12px"><button class="btn primary" data-act="editClt">Configurar meu emprego CLT</button></div>';}
+ else{
+  const fg=num(c.fgts)+k.fgts*Math.max(0,diffM(CUR,addM(CUR,12)))+(k.t13*.08)+(c.fer?k.fer.gross*.08:0);
+  clt='<div class="grid g4" style="margin-bottom:14px">'+
+   kpi('Salário líquido (estimado)',R(k.mes.net),'bruto '+R0(k.b)+' − INSS '+R0(k.mes.inss)+' − IR '+R0(k.mes.ir),'pos')+
+   kpi('13º de '+y,R(k.p1+k.p2),k.avos+'/12 avos · 1ª '+R0(k.p1)+' (30/11) · 2ª '+R0(k.p2)+' (20/12)','pos')+
+   kpi('Férias + 1/3',R(k.fer.net),c.fer?'em '+mLabel(c.fer,true)+' · bruto '+R0(k.fer.gross):'informe o mês das férias','acc')+
+   kpi('FGTS por mês',R(k.fgts),'8% do bruto, depositado pela empresa · saldo em 12 meses ≈ '+R0(fg),'')+'</div>'+
+   '<div class="grid g2"><div class="list">'+
+    row('Salário bruto',R(k.b))+row('INSS (tabela 2026)','− '+R(k.mes.inss),'neg')+row('Imposto de Renda (2026, com redutor)','− '+R(k.mes.ir),'neg','isento até R$ 5.000 de bruto; redução até R$ 7.350')+row('<b>Líquido por mês</b>','<b>'+R(k.mes.net)+'</b>','pos','compare com o salário cadastrado em Fixas')+
+   '</div><div class="list">'+
+    row('13º bruto ('+k.avos+'/12)',R(k.t13))+row('1ª parcela até 30/11',R(k.p1),'pos','sem descontos')+row('2ª parcela até 20/12',R(k.p2),'pos','descontos: INSS '+R0(k.i13)+' · IR '+R0(k.r13))+
+    row('Férias: salário + 1/3',R(k.fer.gross),'','1/3 = '+R0(k.fer.terco))+row('Férias líquidas','<b>'+R(k.fer.net)+'</b>','pos','descontos: INSS '+R0(k.fer.inss)+' · IR '+R0(k.fer.ir))+
+   '</div></div>'+
+   '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Já entram nas previsões: 13º em novembro e dezembro'+(c.fer?', férias em '+mLabel(c.fer,true)+(c.ferAdj!==false?' e o ajuste no mês seguinte (o salário daquele mês já veio nas férias)':''):'')+'. O FGTS não entra no saldo: ele fica na conta do FGTS (saque só em demissão sem justa causa, compra da casa própria, aposentadoria ou saque-aniversário). Valores estimados pelas tabelas de 2026; podem variar com horas extras, faltas, adicionais e convênios.</p>'+
+   '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="editClt">Editar dados CLT</button><button class="btn ghost" data-act="cltOff">Desligar CLT</button></div>';
+ }
+ const ds=S.deals||[];
+ const dcard=d=>{const t=dealStatus(d);const pct=num(d.total)?t.rec/num(d.total):0;
+  return '<section class="card pcard"><div class="top"><div style="min-width:0"><div class="nm">'+esc(d.cli||'Serviço')+'</div><div class="muted" style="font-size:13px">'+esc(d.serv||'')+'</div></div>'+(t.falta>0.004?'<span class="chip acc">falta '+R0(t.falta)+'</span>':'<span class="chip good">Quitado</span>')+'</div>'+
+  (d.text?'<div class="muted" style="font-size:13px;white-space:pre-wrap;border-left:3px solid var(--line);padding:4px 10px;margin:4px 0">'+esc(d.text)+'</div>':'')+
+  '<div class="bar"><i style="width:'+(pct*100)+'%"></i></div>'+
+  '<div class="stats"><div><div class="lb">Valor acordado</div><div class="vl">'+R(d.total)+'</div></div><div><div class="lb">Recebido</div><div class="vl pos">'+R(t.rec)+'</div></div><div><div class="lb">Falta receber</div><div class="vl">'+R(t.falta)+'</div></div></div>'+
+  '<div class="stats"><div><div class="lb">Imposto'+(num(d.tax)?' ('+String(d.tax).replace('.',',')+'%)':'')+'</div><div class="vl neg">'+R(t.tax)+'</div></div><div><div class="lb">Custos/material</div><div class="vl neg">'+R(t.cost)+'</div></div><div><div class="lb">Lucro real</div><div class="vl '+(t.lucro>=0?'pos':'neg')+'">'+R(t.lucro)+'</div></div></div>'+
+  '<div class="muted" style="font-size:13px">Margem <b>'+Math.round(t.marg*100)+'%</b>'+(t.hora?' · você ganha <b>'+R(t.hora)+'/hora</b> ('+num(d.horas)+' h)':'')+(t.next?' · próximo recebimento: <b>'+R(t.next.val)+'</b> em '+String(t.next.day).padStart(2,'0')+'/'+t.next.m.slice(5,7)+'/'+t.next.m.slice(2,4)+' ('+t.next.lb+')':'')+'</div>'+
+  '<details class="billd" style="margin-top:6px"><summary class="muted" style="cursor:pointer;font-size:13px">Ver cronograma ('+t.sc.length+')</summary><div class="items">'+t.sc.map(x=>'<div><span>'+String(x.day).padStart(2,'0')+'/'+x.m.slice(5,7)+'/'+x.m.slice(2,4)+' · '+x.lb+'</span><span class="mono">'+R(x.val)+'</span></div>').join('')+'</div></details>'+
+  '<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editDeal" data-id="'+d.id+'">Editar</button>'+delBtn('deals',d.id)+'</div></section>'};
+ return top('Trabalho','Salário, 13º, férias e serviços','<button class="btn primary" data-act="addDeal">+ Acordo de serviço</button>')+
+ '<section class="card"><div class="hd"><h2>💼 Emprego CLT · pela lei</h2>'+(k?'<span class="chip good">ativo</span>':'')+'</div>'+clt+'</section>'+
+ '<h2 style="margin:26px 0 6px">🤝 Acordos de prestação de serviço</h2><p class="muted" style="margin:0 0 12px;font-size:13px">Escreva o que foi combinado com o cliente. O app monta o cronograma de recebimentos, coloca nas previsões e faz o balanço: imposto, custos, lucro real e quanto você ganha por hora.</p>'+
+ (ds.length?'<div class="grid g2">'+ds.map(dcard).join('')+'</div>':'<section class="card"><div class="empty">Nenhum acordo ainda. Toque em <b>+ Acordo de serviço</b>.</div></section>');
+}
+function formClt(){
+ const c=S.clt||{bruto:'',adm:'',dep:0,fer:'',ferDay:1,ferAdj:true,fgts:'',emp:'',on13:true};
+ openSheet('Meu emprego CLT','<div class="form">'+
+  '<label class="f">Salário bruto (R$)<input name="val" type="number" inputmode="decimal" min="0" step="0.01" value="'+(c.bruto||'')+'" placeholder="o que está na carteira"></label>'+
+  '<label class="f">Empresa (opcional)<input name="emp" value="'+esc(c.emp||'')+'"></label>'+
+  '<label class="f">Mês de admissão<input name="adm" type="month" value="'+(c.adm||'')+'"></label>'+
+  '<label class="f">Dependentes no IR<input name="dep" type="number" inputmode="numeric" min="0" step="1" value="'+(c.dep||0)+'"></label>'+
+  '<label class="f">Mês das próximas férias<input name="fer" type="month" value="'+(c.fer||'')+'"></label>'+
+  '<label class="f">Dia que recebe as férias<input name="ferDay" type="number" inputmode="numeric" min="1" max="31" value="'+(c.ferDay||1)+'"></label>'+
+  '<label class="f">Saldo atual do FGTS (opcional)<input name="fgts" type="number" inputmode="decimal" min="0" step="0.01" value="'+(c.fgts||'')+'"></label>'+
+  '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="ferAdj" type="checkbox" style="width:auto"'+(c.ferAdj!==false?' checked':'')+'> No mês depois das férias, descontar o salário (ele já veio junto com as férias — é o normal)</label>'+
+  '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="on13" type="checkbox" style="width:auto"'+(c.on13!==false?' checked':'')+'> Colocar o 13º na previsão (novembro e dezembro)</label>'+
+  '<p class="muted full" id="cltPrev" style="margin:0;font-size:13px"></p></div>',f=>{
+  if(!need(f,['val']))return false;
+  S.clt={on:true,bruto:num(f.val.value),emp:f.emp.value.trim(),adm:f.adm.value||'',dep:Math.max(0,Math.round(num(f.dep.value))),fer:f.fer.value||'',ferDay:Math.min(31,Math.max(1,Math.round(num(f.ferDay.value)||1))),fgts:num(f.fgts.value),ferAdj:f.ferAdj.checked,on13:f.on13.checked};S.demo=false;commit('Dados CLT salvos');});
+ const f=document.getElementById('sheetForm');
+ const prev=()=>{const b=num(f.val.value);if(!b){document.getElementById('cltPrev').innerHTML='Informe o salário bruto.';return}const n=cltNet(b,num(f.dep.value));document.getElementById('cltPrev').innerHTML='Líquido estimado: <b class="mono">'+R(n.net)+'</b> (INSS '+R(n.inss)+' · IR '+R(n.ir)+') · Férias + 1/3 bruto: <b class="mono">'+R(b*4/3)+'</b>'};
+ f.addEventListener('input',prev);prev();
+}
+function parseDeal(t){ // lê o texto do acordo e sugere valores
+ const T=' '+String(t||'').toLowerCase().replace(/\s+/g,' ')+' ';const money=x=>num(String(x).replace(/\./g,'').replace(',','.'));
+ const r={};const mv='(?:r\\$\\s*)?(\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?|\\d+(?:,\\d{1,2})?)\\s*(mil|k)?';const val=(m)=>m?money(m[1])*(m[2]?1000:1):0;
+ let m=T.match(new RegExp('(?:total|valor|fechado|fechamos|cobrar|cobrei|or[cç]amento)[^\\d]{0,25}'+mv));if(m)r.total=val(m);
+ m=T.match(new RegExp('entrada[^\\d]{0,15}'+mv));if(m)r.ent=val(m);
+ m=T.match(/entrada[^\d]{0,12}(\d{1,3})\s*%/);if(m&&r.total)r.ent=r.total*num(m[1])/100;
+ m=T.match(/(\d{1,2})\s*(?:x|vezes|parcelas|presta[cç][oõ]es|meses)/);if(m)r.n=+m[1];
+ m=T.match(/(?:imposto|nota|iss|simples|mei)[^\d]{0,15}(\d{1,2}(?:,\d+)?)\s*%/);if(m)r.tax=num(m[1].replace(',','.'));
+ m=T.match(new RegExp('(?:material|materiais|custo|custos|gasto)[^\\d]{0,20}'+mv));if(m)r.cost=val(m);
+ m=T.match(/(\d{1,4})\s*(?:h\b|horas)/);if(m)r.horas=+m[1];
+ m=T.match(/dia\s*(\d{1,2})/);if(m)r.day=+m[1];
+ if(!r.total){const all=[...T.matchAll(/r\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/g)].map(x=>money(x[1]));if(all.length)r.total=Math.max(...all)}
+ return r;
+}
+function formDeal(d){
+ d=d||{cli:'',serv:'',text:'',total:'',ent:'',entDate:todayISO(),n:1,first:addM(CUR,1),day:10,tax:0,cost:'',horas:''};
+ openSheet(d.id?'Editar acordo':'Novo acordo de serviço','<div class="form">'+
+  '<label class="f">Cliente<input name="desc" value="'+esc(d.cli)+'" placeholder="Ex.: Igreja Central"></label>'+
+  '<label class="f">Serviço<input name="serv" value="'+esc(d.serv||'')+'" placeholder="Ex.: Sonorização do evento"></label>'+
+  '<label class="f full">O que foi acordado (escreva do seu jeito)<textarea name="text" rows="4" placeholder="Ex.: Fechamos R$ 3.000, entrada de R$ 1.000 e o resto em 4x todo dia 10. Material R$ 400. Uns 30 horas de trabalho. Nota 6%.">'+esc(d.text||'')+'</textarea></label>'+
+  '<div class="full"><button type="button" class="btn sm" id="dealParse">✨ Preencher a partir do texto</button> <span class="muted" style="font-size:12.5px" id="dealParseMsg"></span></div>'+
+  '<label class="f">Valor total acordado (R$)<input name="total" type="number" inputmode="decimal" min="0" step="0.01" value="'+(d.total||'')+'"></label>'+
+  '<label class="f">Entrada (R$)<input name="ent" type="number" inputmode="decimal" min="0" step="0.01" value="'+(d.ent||'')+'"></label>'+
+  '<label class="f">Data da entrada<input name="entDate" type="date" value="'+(d.entDate||'')+'"></label>'+
+  '<label class="f">Resto em quantas parcelas<input name="n" type="number" inputmode="numeric" min="1" max="120" value="'+(d.n||1)+'"></label>'+
+  '<label class="f">1ª parcela em<input name="first" type="month" value="'+(d.first||addM(CUR,1))+'"></label>'+
+  '<label class="f">Dia das parcelas<input name="day" type="number" inputmode="numeric" min="1" max="31" value="'+(d.day||10)+'"></label>'+
+  '<label class="f">Imposto/nota (%)<input name="tax" type="number" inputmode="decimal" min="0" max="100" step="0.01" value="'+(d.tax||0)+'"></label>'+
+  '<label class="f">Custos e material (R$)<input name="cost" type="number" inputmode="decimal" min="0" step="0.01" value="'+(d.cost||'')+'"></label>'+
+  '<label class="f">Horas de trabalho (opcional)<input name="horas" type="number" inputmode="decimal" min="0" step="0.5" value="'+(d.horas||'')+'"></label>'+
+  '<p class="muted full" id="dealPrev" style="margin:0;font-size:13px"></p></div>',f=>{
+  if(!need(f,['desc','total']))return false;
+  upsert('deals',{id:d.id||uid(),cli:f.desc.value.trim(),serv:f.serv.value.trim(),text:f.text.value.trim(),total:num(f.total.value),ent:num(f.ent.value),entDate:f.entDate.value||'',n:Math.max(1,Math.round(num(f.n.value)||1)),first:f.first.value||addM(CUR,1),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||10))),tax:num(f.tax.value),cost:num(f.cost.value),horas:num(f.horas.value)});commit('Acordo salvo');});
+ const f=document.getElementById('sheetForm');
+ const prev=()=>{const x={total:num(f.total.value),ent:num(f.ent.value),entDate:f.entDate.value,n:num(f.n.value),first:f.first.value,day:num(f.day.value),tax:num(f.tax.value),cost:num(f.cost.value),horas:num(f.horas.value)};if(!x.total){document.getElementById('dealPrev').innerHTML='Informe o valor total.';return}
+  const rest=x.total-Math.min(x.total,x.ent),n=Math.max(1,Math.round(x.n||1)),tax=x.total*x.tax/100,l=x.total-tax-x.cost;
+  document.getElementById('dealPrev').innerHTML=(x.ent?'Entrada <b class="mono">'+R(x.ent)+'</b> + ':'')+(rest>0?n+'x de <b class="mono">'+R(rest/n)+'</b>':'')+' · imposto '+R(tax)+' · <b>lucro real '+R(l)+'</b> ('+Math.round(l/x.total*100)+'%)'+(x.horas?' · '+R(l/x.horas)+'/hora':'')};
+ f.addEventListener('input',prev);prev();
+ document.getElementById('dealParse').onclick=()=>{const r=parseDeal(f.text.value);const set=(n,v)=>{if(v!=null&&v!==''&&!isNaN(v))f[n].value=Math.round(v*100)/100};
+  set('total',r.total);set('ent',r.ent);set('n',r.n);set('tax',r.tax);set('cost',r.cost);set('horas',r.horas);set('day',r.day);
+  const got=Object.keys(r).length;document.getElementById('dealParseMsg').textContent=got?'Preenchi '+got+' campo'+(got>1?'s':'')+'. Confira os valores.':'Não achei valores no texto. Preencha os campos abaixo.';prev()};
+}
 function cardField(sel,label){
  const cs=S.cards||[];
  return '<label class="f">'+(label||'Cartão de crédito')+'<select name="card"><option value="">'+(cs.length?'Nenhum (não é no cartão)':'Nenhum cartão cadastrado')+'</option>'+cs.map(c=>'<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+esc(c.name)+' · vence dia '+c.due+'</option>').join('')+'</select></label>';
@@ -1640,7 +1798,7 @@ document.addEventListener('click',e=>{
  const ar=e.target.closest('[data-as-run]');if(ar){asRun(ar.dataset.asRun);if(window.innerWidth<=900)asClose();return}
  const aa=e.target.closest('[data-as-ask]');if(aa){AS_OPEN=true;asAsk(aa.dataset.asAsk);return}
  if(e.target.closest('[data-act=asClose]')){asClose();return}
- const go=e.target.closest('[data-go]');if(go){view=go.dataset.go;render();window.scrollTo(0,0);return}
+ const go=e.target.closest('[data-go]');if(go){e.preventDefault();if(go.dataset.lm==='next')lancMonth=addM(CUR,1);view=go.dataset.go;render();window.scrollTo(0,0);return}
  const tp=e.target.closest('[data-tip]');if(tp){tipTab=tp.dataset.tip;render();return}
  const b=e.target.closest('[data-act]');if(!b)return;
  const a=b.dataset.act,id=b.dataset.id;
@@ -1651,6 +1809,11 @@ document.addEventListener('click',e=>{
  else if(a==='addInst')formInst();
  else if(a==='editInst')formInst({...find('inst',id)});
  else if(a==='addInIn')formInIn();
+ else if(a==='editClt')formClt();
+ else if(a==='cltOff'){if(S.clt){S.clt.on=false;S.demo=false;commit('CLT desligado')}}
+ else if(a==='addDeal')formDeal();
+ else if(a==='editDeal')formDeal({...find('deals',id)});
+ else if(a==='goTrab'){view='trab';render();window.scrollTo(0,0)}
  else if(a==='editInIn')formInIn({...find('instIn',id)});
  else if(a==='addGoal')formGoal();
  else if(a==='editGoal')formGoal({...find('goals',id)});
