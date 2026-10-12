@@ -812,6 +812,37 @@ function vExt(){
  '<section class="card" style="margin-top:16px"><div class="hd"><h2>📝 Histórico do que você fez</h2><span class="muted" style="font-size:12px">últimas '+log.length+' ações</span></div><div class="list">'+
   (log.length?log.map(l=>{const d=new Date(l.at);return '<div class="row" style="grid-template-columns:110px minmax(0,1fr)"><div class="s mono">'+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+'</div><div class="t" style="font-weight:500">'+esc(l.msg)+(l.v&&VIEW_NAMES[l.v]?' <span class="muted" style="font-size:12px">· '+VIEW_NAMES[l.v]+'</span>':'')+'</div></div>'}).join(''):'<div class="empty">A partir de agora, tudo o que você cadastrar, editar, apagar ou marcar aparece aqui.</div>')+'</div></section>';
 }
+
+/* ===== Limpar dados: tirar exemplos ou começar do zero ===== */
+function demoFound(){
+ const D=demoCards(demo());const sig={tx:x=>x.type+'|'+norm(x.desc)+'|'+num(x.val),rec:x=>x.type+'|'+norm(x.desc)+'|'+num(x.val),inst:x=>norm(x.desc)+'|'+num(x.total)+'|'+x.n,goals:x=>norm(x.name)+'|'+num(x.target),cards:x=>norm(x.name)+'|'+x.close+'|'+x.due};
+ const out=[];const lab={tx:'Lançamento',rec:'Fixa',inst:'Compra parcelada',goals:'Meta',cards:'Cartão'};
+ Object.keys(sig).forEach(c=>{const set=new Set((D[c]||[]).map(sig[c]));(S[c]||[]).forEach(x=>{if(set.has(sig[c](x)))out.push({c,id:x.id,lb:lab[c],name:x.desc||x.name,val:x.val!=null?x.val:x.total!=null?x.total:x.target})})});
+ const dj=new Set((D.rec||[]).filter(r=>r.type==='in').map(r=>norm(r.desc)+'|'+num(r.val)));
+ (S.jobs||[]).forEach(j=>{if(dj.has(norm(j.patrao)+'|'+num(j.val)))out.push({c:'jobs',id:j.id,lb:'Renda (Trabalho)',name:(jobPessoa(j)!=='Eu'?jobPessoa(j)+' · ':'')+j.patrao,val:j.val})});
+ if(S.initial&&D.initial&&num(S.initial.val)===num(D.initial.val)&&!S.initial.day)out.push({c:'initial',id:'ini',lb:'Saldo inicial de exemplo',name:'Saldo em conta',val:S.initial.val});
+ return out;
+}
+function openClean(){
+ const L=demoFound();
+ openSheet('🧹 Limpar dados','<div class="form">'+
+  '<div class="full"><b>1. Apagar só os exemplos</b><p class="muted" style="margin:4px 0 8px;font-size:13px">Estes cadastros são iguais aos dados de exemplo que vêm no app. Desmarque o que for seu de verdade.</p>'+
+  (L.length?'<div class="list">'+L.map((x,i)=>'<label class="row" style="grid-template-columns:auto minmax(0,1fr) auto;cursor:pointer"><input type="checkbox" name="dm" value="'+i+'" checked style="width:auto"><div style="min-width:0"><div class="t">'+esc(x.name||'')+'</div><div class="s">'+x.lb+'</div></div><div class="v">'+(x.val!=null?R(x.val):'')+'</div></label>').join('')+'</div>':'<div class="empty" style="text-align:left">Nenhum dado de exemplo encontrado. 👍</div>')+
+  '</div>'+
+  '<div class="full" style="border-top:1px solid var(--line);padding-top:12px;margin-top:6px"><b>2. Apagar tudo e começar do zero</b><p class="muted" style="margin:4px 0 8px;font-size:13px">Apaga todos os lançamentos, fixas, trabalhos, parcelados, cartões, metas, dízimos e o saldo. Sua conta, o termo e as categorias continuam.</p>'+
+  '<button type="button" class="btn danger" data-act="wipeAll">Apagar TUDO e começar do zero</button></div>'+
+  '</div>',f=>{
+  const sel=[...f.querySelectorAll('[name=dm]:checked')].map(c=>L[+c.value]);if(!sel.length){toast('Nada marcado');return false}
+  sel.forEach(x=>{if(x.c==='initial'){S.initial=null;return}S[x.c]=(S[x.c]||[]).filter(y=>y.id!==x.id)});
+  if(sel.some(x=>x.c==='cards'))(S.tx||[]).forEach(t=>{if(t.cardId&&!cardById(t.cardId))t.cardId=null});
+  S.demo=false;commit(sel.length+' exemplo(s) apagado(s)');});
+ const sb=document.querySelector('#sheetForm button[type=submit]');if(sb)sb.textContent=L.length?'Apagar exemplos marcados':'Fechar';
+}
+function wipeAll(){
+ dupAsk('Apagar <b>todos</b> os seus dados financeiros? Isso não pode ser desfeito.',[
+  ['Sim, apagar tudo e começar do zero',()=>{const keep={termsAt:S.termsAt,catIn:S.catIn,catOut:S.catOut,cats:S.cats,budget:S.budget,people:[],log:S.log||[],migSal:1};S=Object.assign(blank(),keep,{demo:false});closeSheetQuiet();view='painel';commit('Tudo apagado. Comece informando o saldo em conta.')}],
+  ['Cancelar',()=>{}]]);
+}
 /* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
 let projMonth=null;
 function scnAdj(sc,m){ // ajustes do cenário simulado para o mês m: [entra a mais, sai a mais]
@@ -984,8 +1015,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.27';
+const APP_VERSION='2.28';
 const CHANGELOG=[
+ ['2.28','12/10/2026',['Botão 🧹 Limpar dados no topo: apagar só os dados de exemplo (com lista para conferir) ou apagar tudo e começar do zero.']],
  ['2.27','12/10/2026',['Assistente por voz: toque no 🎤 e fale a pergunta. Opção 🔊 para ouvir as respostas em voz alta.']],
  ['2.26','12/10/2026',['Nova aba 📜 Extrato: tudo o que entrou, saiu e vai acontecer, com data, origem (de onde veio), situação e saldo linha a linha. Filtro por período, tipo e busca.','Dízimo mostra de onde veio e a conta (10% de quanto).','📝 Histórico do que você fez (cadastros, edições, exclusões, pagamentos).','Assistente responde "o que gastei com X" no mês, mês passado, últimos N meses ou no ano, e abre o Extrato filtrado.']],
  ['2.25','12/10/2026',['A data do saldo informado é o início do app: nada antes dela gera dízimo devido, conta atrasada ou "a receber".','Opção "neste mês já recebi e já paguei tudo": salário, contas fixas, parcelas e faturas do mês de início contam como resolvidos; só entram avulsos e combinados depois (ex.: entrada parcelada).']],
@@ -1222,7 +1254,7 @@ function render(){
  NAV_BACK=false;NAV_LAST=view;
  buildNav();
  const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,trab:vTrab,ext:vExt,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
- const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+eyeBtn()+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
+ const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+eyeBtn()+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button><button class="btn sm ghost" data-act="clean" title="Apagar exemplos ou começar do zero">🧹 Limpar dados</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+asBar()+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
 }
@@ -1528,6 +1560,7 @@ const AS_ACTIONS={
  trab:()=>goView('trab'),
  acordo:()=>goView('trab',()=>formJob({pessoa:'Eu',tipo:'informal',patrao:'',val:'',day:5,t13:'prop',fer:'simples',bonusMonth:12,desc:0,sal:true})),
  trabAdd:()=>goView('trab',()=>formJob()),
+ clean:()=>{asClose();openClean()},
  meta:()=>goView('metas',()=>formGoal()),
  saldoIni:()=>goView('fixas',()=>formInit()),
  oferta:()=>{dizTab='calc';goView('diz',()=>formOffer())},
@@ -1542,6 +1575,7 @@ const AS_ACTIONS={
 };
 // [palavras-chave, resposta, botões [rótulo, ação|view]]
 const AS_KB=[
+ [['zerar','apagar exemplos','apagar os exemplos','comecar do zero','limpar dados','dados de exemplo','resetar','apagar tudo'],'Toque em <b>🧹 Limpar dados</b> no topo: dá para apagar só os exemplos (você confere a lista) ou apagar tudo e começar do zero.',[['Abrir Limpar dados','clean']]],
  [['voz','falar','microfone','por voz','audio'],'Toque no <b>🎤</b> ao lado da pergunta e fale. Para ouvir as respostas em voz alta, toque no <b>🔇/🔊</b> na janela do assistente.',[]],
  [['extrato','historico','registro','de onde veio','de onde vem','o que aconteceu','movimentacao','movimentacoes'],'O <b>📜 Extrato</b> mostra tudo o que entrou, saiu e vai acontecer, com a origem de cada valor (inclusive como o dízimo foi calculado) e o histórico do que você fez.',[['Abrir Extrato','v:ext']]],
  [['projecao','projetar','simular','simulacao','cenario','como vou estar','como estarei','vou ter em','quanto vou ter','fim do ano','daqui a'],'A <b>🔮 Projeção e simulação</b> fica no Painel, logo abaixo do Resumo geral: escolha mês e ano e mude o cenário (renda, gastos, compras) para comparar.',[['Abrir projeção','proj']]],
@@ -2590,7 +2624,9 @@ document.addEventListener('click',e=>{
   try{navigator.clipboard.writeText(txt).then(done,()=>fallbackCopy(txt))}catch(err){fallbackCopy(txt)}}
  else if(a==='mPrev'){lancMonth=addM(lancMonth,-1);render()}
  else if(a==='mNext'){lancMonth=addM(lancMonth,1);render()}
- else if(a==='clearDemo'){if(delArm!==b){delArm=b;b.textContent='Tem certeza? Toque de novo';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Apagar exemplos e começar'}},3500);return}S=blank();delArm=null;commit('Pronto! Comece cadastrando sua renda em Fixas.');view='fixas';render()}
+ else if(a==='clean'){openClean()}
+ else if(a==='wipeAll'){e.preventDefault();wipeAll()}
+ else if(a==='clearDemo'){if(delArm!==b){delArm=b;b.textContent='Tem certeza? Toque de novo';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Apagar exemplos e começar'}},3500);return}S=Object.assign(blank(),{termsAt:S.termsAt,migSal:1,log:S.log||[]});delArm=null;view='trab';commit('Pronto! Comece informando o saldo e cadastrando suas rendas.')}
  else if(a==='del'){if(!S[b.dataset.col]&&b.dataset.col!=='ideas')S[b.dataset.col]=[];if(delArm!==b){delArm=b;b.textContent='Confirmar';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Excluir'}},3000);return}delArm=null;if(b.dataset.col==='ideas'){saveIdeas(getIdeas().filter(x=>x.id!==id));toast('Excluído');return}S.demo=false;S[b.dataset.col]=S[b.dataset.col].filter(x=>x.id!==id);commit('Excluído')}
  else if(a==='simToInst'){const g=k=>num(document.getElementById(k).value);const tv=document.getElementById('sTrade').checked?g('sTradeVal'):0;formInst({desc:document.getElementById('sDesc').value,cat:'Transporte',total:Math.max(0,g('sPrice')-g('sDown')-tv),n:Math.max(1,Math.round(g('sN'))),rate:g('sRate'),first:document.getElementById('sFirst').value||addM(CUR,1),day:10,pay:'Boleto'})}
 });
