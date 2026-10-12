@@ -743,8 +743,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.14';
+const APP_VERSION='2.15';
 const CHANGELOG=[
+ ['2.15','12/10/2026',['Simulador explica por que o saldo fica negativo (entrada maior que o saldo, sobra menor que a parcela ou saldo inicial não informado).']],
  ['2.14','12/10/2026',['Simulador refeito: compra parcelada grande cruzando todos os seus dados — sobra e saldo com e sem a compra mês a mês, mês mais apertado, menor saldo, quando termina e gráfico comparando.','Simulador mostra o saldo do mês atual considerando tudo.']],
  ['2.13','12/10/2026',['Dízimo e ofertas entram em todas as projeções (resumo, fim do mês, fim do ano, simulação, sobra prevista e metas).','Dízimo calculado também sobre 13º, férias e pagamentos do acordo informal/CLT.']],
  ['2.12','12/10/2026',['Painel: 🧭 Resumo geral cruzando tudo (saldo hoje, fim do mês, fim do ano, contas, parcelas, trabalho, dízimo, orçamento, metas e alertas).','🔮 Projeção e simulação no topo do Painel: escolha a data e simule cenários (renda a mais/menos, gastos, compra à vista ou parcelada) comparando com hoje.']],
@@ -1725,6 +1726,7 @@ function vSim(){
   '<div class="rtile"><div class="lb">Sobra prevista por mês</div><div class="vl '+(st.sobra>=0?'pos':'neg')+'">'+R(st.sobra)+'</div><div class="sub">renda + trabalho − contas − parcelas − dia a dia − dízimo</div></div>'+
  '</div></section>'+
  '<div class="grid g32"><section class="card"><div class="hd"><h2>Dados da compra</h2></div><div class="form">'+
+  '<p class="muted full" style="margin:0;font-size:12.5px">Os valores abaixo são um <b>exemplo</b> — troque pelos da compra que você quer fazer.</p>'+
   '<label class="f full">O que você quer comprar<input id="sDesc" value="Carro usado"></label>'+
   '<label class="f">Preço à vista (R$)<input id="sPrice" type="number" inputmode="decimal" min="0" step="100" value="45000"></label>'+
   '<label class="f">Desconto à vista (%)<input id="sDisc" type="number" inputmode="decimal" min="0" step="0.5" value="5"></label>'+
@@ -1767,8 +1769,12 @@ function simCalc(){
   k2('Menor saldo com a compra',R0(lowB.saldo),'em '+mLabel(lowB.m)+(lowB.saldo<0?' · fica negativo!':''),lowB.saldo<0?'neg':'pos')+
   k2('Saldo ao terminar ('+mLabel(last)+')',R0(endB.saldo),'sem a compra seria '+R0(endA.saldo)+' (−'+R0(Math.max(0,endA.saldo-endB.saldo))+')','acc')+
   k2('Juntar e pagar à vista',mVista==null?'—':dur(mVista),mVista==null?'sem sobra hoje':'guardando a sobra, rendendo 0,8% a.m.','acc');
- let cls,msg;
- if(firstNeg||sobB<0||pct>0.35){cls='bad';msg='<b>Não recomendado agora.</b> '+(firstNeg?'Seu saldo fica <b>negativo em '+mLabel(firstNeg.m,true)+'</b>. ':'')+(sobB<0?'Durante as parcelas falta, em média, '+R0(-sobB)+' por mês. ':'')+(pct>0.35?'A compra leva '+Math.round(pct*100)+'% da renda fixa. ':'')+'Aumente a entrada, alongue menos, escolha algo mais barato ou junte antes.'}
+ let cls,msg;const st=nowStatus(),dispDown=A.find(r=>r.m===downM);const why=[];
+ if(st.bal==null)why.push('Você ainda não informou o <b>saldo inicial</b> (Painel → Informar saldo inicial), então a conta começa do zero');
+ if(down&&dispDown&&down>dispDown.saldo)why.push('A <b>entrada de '+R0(down)+'</b> é maior que o que você terá em '+mLabel(downM)+' (~'+R0(Math.max(0,dispDown.saldo))+')');
+ if(sobB<0)why.push('A parcela + custo extra ('+R0(p+extra)+') é maior que a sua sobra (~'+R0(sobA)+')');
+ const whyH=firstNeg&&why.length?'<div class="muted" style="font-size:13px;margin-top:6px"><b>Por que fica negativo:</b> '+why.join('; ')+'.</div>':'';
+ if(firstNeg||sobB<0||pct>0.35){cls='bad';msg='<b>Não recomendado agora.</b> '+(firstNeg?'Seu saldo fica <b>negativo em '+mLabel(firstNeg.m,true)+'</b>. ':'')+(sobB<0?'Durante as parcelas falta, em média, '+R0(-sobB)+' por mês. ':'')+(pct>0.35?'A compra leva '+Math.round(pct*100)+'% da renda fixa. ':'')+'Diminua a entrada ou pague mais tarde, escolha algo mais barato ou junte antes.'+whyH}
  else if(pct>0.2||negM>0||diff>vista*0.3||sobB<sobA*0.35){cls='warn';msg='<b>Dá, mas pesa.</b> Sua sobra cai de '+R0(sobA)+' para '+R0(sobB)+' por mês'+(negM?' e '+negM+' mês'+(negM>1?'es':'')+' fica'+(negM>1?'m':'')+' no vermelho (o pior é '+mLabel(worst.m)+')':'')+'. '+(diff>vista*0.3?'Você paga '+R0(diff)+' só de juros. ':'')+(mVista!=null&&mVista<=n/2?'Juntando a sobra você compra à vista em '+dur(mVista)+'. ':'')}
  else{cls='good';msg='<b>Cabe no orçamento.</b> Mesmo com a compra sobra cerca de '+R0(sobB)+' por mês e o saldo nunca fica negativo. '+(diff>0?'À vista você economizaria '+R0(diff)+'.':'')}
  document.getElementById('sVerdict').innerHTML='<div class="verdict '+cls+'">'+msg+'</div><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn sm" data-act="simToInst">Lançar como compra parcelada</button></div>';
