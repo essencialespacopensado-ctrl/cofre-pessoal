@@ -288,8 +288,21 @@ const BUDGET={
  'Outros':[2,'Gastos que não se encaixam nas outras categorias.'],
  'Reserva e investimentos':[15,'Dinheiro guardado: reserva de emergência, metas e investimentos. Aqui o ideal é chegar ao valor, não ficar abaixo.']
 };
-const CAT_OUT=Object.keys(BUDGET);
-const CAT_IN=['Salário','Renda da família','Serviços extras','Vendas','Rendimentos','Outros'];
+const DEF_IN=['Salário','Renda da família','Serviços extras','Vendas','Rendimentos','Outros'];
+const LOCKED_CATS=['Renda da família','Reserva e investimentos'];
+let CAT_OUT=Object.keys(BUDGET), CAT_IN=DEF_IN.slice();
+function refreshCats(){
+ if(S&&S.cats&&Array.isArray(S.cats.out)){CAT_OUT=S.cats.out.map(c=>c.name);CAT_IN=(S.cats.in||DEF_IN).slice()}
+ else{CAT_OUT=Object.keys(BUDGET);CAT_IN=DEF_IN.slice()}
+}
+function ensureCats(){
+ if(S.cats&&Array.isArray(S.cats.out))return S.cats;
+ const b=S.budget||{};
+ S.cats={out:Object.keys(BUDGET).map(n=>({name:n,desc:BUDGET[n][1],pct:b[n]!=null?num(b[n]):BUDGET[n][0]})),in:DEF_IN.slice()};
+ S.budget={};return S.cats;
+}
+function catDef(c){return S&&S.cats&&Array.isArray(S.cats.out)?S.cats.out.find(x=>x.name===c):null}
+function budDesc(c){const d=catDef(c);if(d)return d.desc||'';return BUDGET[c]?BUDGET[c][1]:''}
 const PAY=['Pix','Débito','Crédito','Dinheiro','Boleto'];
 
 function ym(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
@@ -375,7 +388,7 @@ function bills(m){
  out.forEach(b=>b.paid=!!(S.paid||{})[b.key]);
  return out.sort((a,b)=>a.day-b.day);
 }
-function budPct(c){const b=S.budget||{};return b[c]!=null?num(b[c]):(BUDGET[c]?BUDGET[c][0]:0)}
+function budPct(c){const b=S.budget||{};if(b[c]!=null)return num(b[c]);const d=catDef(c);if(d)return num(d.pct);return BUDGET[c]?BUDGET[c][0]:0}
 function spentByCat(m){const c={};
  S.tx.filter(t=>t.type==='out'&&t.date&&t.date.slice(0,7)===m).forEach(t=>c[t.cat]=(c[t.cat]||0)+num(t.val));
  S.rec.filter(r=>r.type==='out'&&recActive(r,m)).forEach(r=>c[r.cat]=(c[r.cat]||0)+num(r.val));
@@ -413,8 +426,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='1.8';
+const APP_VERSION='1.9';
 const CHANGELOG=[
+ ['1.9','11/10/2026',['Categorias editáveis: criar, renomear, apagar e mudar explicação e % de todas as categorias de gastos e entradas (botão ⚙️ Categorias em Orçamento, Fixas e Lançamentos).']],
  ['1.8','11/10/2026',['Correção: a tela do Desenvolvedor agora reconhece a confirmação de e-mail na hora e mostra todos os usuários cadastrados.']],
  ['1.7','11/10/2026',['Desenvolvedor: lista de usuários mostra todos (inclusive você), com ativos, online agora, e-mail e último acesso.']],
  ['1.6','11/10/2026',['"Como usar" mais visível: item no menu, cartão de boas-vindas no Painel e botão na tela de entrar.']],
@@ -587,7 +601,7 @@ function buildNav(){
  setSync(syncState);
 }
 function render(){
- S.ideas=S.ideas||[];S.budget=S.budget||{};S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};
+ S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};
  const main=document.getElementById('main');
  document.body.classList.toggle('locked',locked||(ACCESS!=='ok'&&!ME.owner));
  if(ACCESS!=='ok'&&!ME.owner){main.innerHTML=vBlocked();return}
@@ -595,7 +609,7 @@ function render(){
  if(!S.termsAt){main.innerHTML=vTermsGate();return}
  if(view==='admin'&&!ME.owner)view='painel';
  buildNav();
- const v={diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
+ const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
  const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
@@ -696,7 +710,7 @@ function insights(){
 function vLanc(){
  const list=S.tx.filter(t=>t.date&&t.date.slice(0,7)===lancMonth).sort((a,b)=>b.date.localeCompare(a.date));
  const x=month(lancMonth);
- return top('Lançamentos','Entradas e gastos','<button class="btn primary" data-act="addTx">'+icon('lanc')+'Novo lançamento</button>')+
+ return top('Lançamentos','Entradas e gastos','<button class="btn sm" data-go="cats">⚙️ Categorias</button>'+'<button class="btn primary" data-act="addTx">'+icon('lanc')+'Novo lançamento</button>')+
  '<section class="card"><div class="hd"><div class="monthnav"><button class="btn sm ghost" data-act="mPrev" aria-label="Mês anterior">‹</button><h2 style="min-width:150px;text-align:center">'+mLabel(lancMonth,true)+'</h2><button class="btn sm ghost" data-act="mNext" aria-label="Próximo mês">›</button></div>'+
  '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip good">+ '+R(x.inVar)+'</span><span class="chip bad">− '+R(x.outVar)+'</span></div></div>'+
  '<div class="list">'+(list.length?list.map(t=>txRow(t)).join(''):'<div class="empty">Nada lançado em '+mLabel(lancMonth,true)+'. Toque em <b>Novo lançamento</b> para começar.</div>')+'</div>'+
@@ -713,7 +727,7 @@ function vFixas(){
  const ins=S.rec.filter(r=>r.type==='in'),outs=S.rec.filter(r=>r.type==='out').sort((a,b)=>(a.day||0)-(b.day||0));
  const ti=ins.reduce((a,r)=>a+num(r.val),0),to=outs.reduce((a,r)=>a+num(r.val),0);
  const row=r=>'<div class="row"><div class="ic '+r.type+'">'+String(r.day||'—').padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(r.desc)+'</div><div class="s">'+esc(r.cat)+' · todo dia '+(r.day||'—')+(r.start?' · desde '+mLabel(r.start):'')+'</div></div><div class="v '+(r.type==='in'?'pos':'')+'">'+R(r.val)+'</div><div class="del" style="display:flex;gap:4px"><button class="btn sm ghost" data-act="editRec" data-id="'+r.id+'">Editar</button>'+delBtn('rec',r.id)+'</div></div>';
- return top('Recorrentes','Entradas e contas fixas','<button class="btn primary" data-act="addRec">'+icon('fixas')+'Nova recorrente</button>')+
+ return top('Recorrentes','Entradas e contas fixas','<button class="btn sm" data-go="cats">⚙️ Categorias</button>'+'<button class="btn primary" data-act="addRec">'+icon('fixas')+'Nova recorrente</button>')+
  '<div class="grid g2"><section class="card"><div class="hd"><h2>Entradas fixas</h2><span class="chip good">'+R(ti)+'/mês</span></div><div class="list">'+(ins.length?ins.map(row).join(''):'<div class="empty">Cadastre seu salário ou renda que entra todo mês.</div>')+'</div></section>'+
  '<section class="card"><div class="hd"><h2>Contas fixas</h2><span class="chip bad">'+R(to)+'/mês</span></div><div class="list">'+(outs.length?outs.map(row).join(''):'<div class="empty">Aluguel, luz, água, internet, escola…</div>')+'</div></section></div>'+
  '<section class="card" style="margin-top:16px"><div class="hd"><h2>Saldo inicial</h2><button class="btn sm" data-act="editInit">'+(S.initial?'Editar':'Informar')+'</button></div>'+
@@ -761,7 +775,7 @@ function vOrc(){
  const useFam=S.budgetFamily!==false;
  const base=inc.sal+inc.ext+(useFam?inc.fam:0);
  const sp=spentByCat(m);
- Object.keys(sp).forEach(k=>{if(!BUDGET[k]){sp['Outros']=(sp['Outros']||0)+sp[k];delete sp[k]}});
+ Object.keys(sp).forEach(k=>{if(!CAT_OUT.includes(k)){const o=CAT_OUT.includes('Outros')?'Outros':CAT_OUT[CAT_OUT.length-1];if(o){sp[o]=(sp[o]||0)+sp[k]}delete sp[k]}});
  const totPct=CAT_OUT.reduce((a,c)=>a+budPct(c),0);
  let over=0,overN=0;
  const rows=CAT_OUT.map(c=>{
@@ -770,11 +784,11 @@ function vOrc(){
   if(save){cls=ratio>=1?'good':ratio>=.5?'warn':'bad';msg=ratio>=1?'Meta do mês batida':'Faltam '+R0(rec-g)+' para guardar'}
   else if(g>rec&&g>0){cls='bad';over+=g-rec;overN++;msg='Passou '+R0(g-rec)+(rec>0?' (+'+Math.round((ratio-1)*100)+'%)':'')}
   else{cls=ratio>=.8?'warn':'good';msg='Ainda pode gastar '+R0(rec-g)}
-  return '<div class="brow"><div style="min-width:0"><div class="t">'+esc(c)+'</div><div class="s">'+esc(BUDGET[c][1])+'</div></div>'+
+  return '<div class="brow"><div style="min-width:0"><div class="t">'+esc(c)+'</div><div class="s">'+esc(budDesc(c))+'</div></div>'+
    '<label class="pct"><input type="number" inputmode="decimal" min="0" max="100" step="1" value="'+pct+'" data-bud="'+esc(c)+'" id="bud-'+CAT_OUT.indexOf(c)+'" aria-label="Percentual recomendado para '+esc(c)+'">%</label>'+
    '<div class="bcol"><div class="bbar '+cls+'"><i style="width:'+Math.min(100,ratio*100)+'%"></i>'+(ratio>1&&!save?'<b style="width:'+Math.min(100,(ratio-1)/ratio*100)+'%"></b>':'')+'</div>'+
    '<div class="bnums"><span class="mono">'+R0(g)+' <span class="muted">de '+R0(rec)+'</span></span><span class="'+(cls==='bad'?'neg':cls==='warn'?'wrn':'pos')+'">'+msg+'</span></div></div></div>'}).join('');
- return top('Orçamento · '+mLabel(m,true),'Quanto gastar em cada categoria','<div class="monthnav"><button class="btn sm ghost" data-act="oPrev" aria-label="Mês anterior">‹</button><span class="mono" style="min-width:64px;text-align:center">'+mLabel(m)+'</span><button class="btn sm ghost" data-act="oNext" aria-label="Próximo mês">›</button></div>')+
+ return top('Orçamento · '+mLabel(m,true),'Quanto gastar em cada categoria','<button class="btn sm" data-go="cats">⚙️ Categorias</button>'+'<div class="monthnav"><button class="btn sm ghost" data-act="oPrev" aria-label="Mês anterior">‹</button><span class="mono" style="min-width:64px;text-align:center">'+mLabel(m)+'</span><button class="btn sm ghost" data-act="oNext" aria-label="Próximo mês">›</button></div>')+
  '<div class="grid g32" style="margin-bottom:16px"><section class="card hero"><div class="kpi"><div class="lb">Renda base do orçamento</div></div><div class="big">'+R0(base)+'</div>'+
   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span class="chip">Seu salário '+R0(inc.sal)+'</span><span class="chip '+(useFam?'acc':'')+'">'+(useFam?'+':'×')+' Renda da família '+R0(inc.fam)+'</span><span class="chip">+ Extras '+R0(inc.ext)+'</span></div>'+
   '<div style="margin-top:14px"><button class="btn sm" data-act="togFam">'+(useFam?'Calcular só com o meu salário':'Somar a renda da família')+'</button></div></section>'+
@@ -863,6 +877,67 @@ async function admUser(u,s){
   if(s==='removed'){await DB.doc('ideas/'+u).delete();delete ALL[u];try{await DB.doc('data/users/'+u+'/finance').delete()}catch(e){}}
   toast(s==='ok'?'Usuário reativado':s==='paused'?'Usuário pausado':'Usuário excluído');render();
  }catch(e){toast('Não consegui salvar. Tente de novo.')}
+}
+
+/* Categorias */
+function catUse(name,type){
+ let n=0;S.tx.forEach(t=>{if(t.cat===name&&(type==='in'?t.type==='in':t.type==='out'))n++});
+ S.rec.forEach(r=>{if(r.cat===name&&(type==='in'?r.type==='in':r.type==='out'))n++});
+ if(type==='out')S.inst.forEach(i=>{if(i.cat===name)n++});
+ return n;
+}
+function renameCatEverywhere(type,from,to){
+ const isT=x=>type==='in'?x.type==='in':x.type==='out';
+ S.tx.forEach(t=>{if(t.cat===from&&isT(t))t.cat=to});
+ S.rec.forEach(r=>{if(r.cat===from&&isT(r))r.cat=to});
+ if(type==='out'){S.inst.forEach(i=>{if(i.cat===from)i.cat=to});if(S.budget&&S.budget[from]!=null){S.budget[to]=S.budget[from];delete S.budget[from]}}
+}
+function vCats(){
+ refreshCats();
+ const tot=CAT_OUT.reduce((a,c)=>a+budPct(c),0);
+ const lockTag='<span class="chip" title="Usada em cálculos do app">fixa</span>';
+ const rowOut=c=>{const u=catUse(c,'out'),lk=LOCKED_CATS.includes(c);
+  return '<div class="row" style="grid-template-columns:minmax(0,1fr) auto auto"><div style="min-width:0"><div class="t">'+esc(c)+' '+(lk?lockTag:'')+'</div><div class="s">'+esc(budDesc(c)||'Sem explicação')+' · '+u+' uso'+(u===1?'':'s')+'</div></div><div class="v">'+budPct(c)+'%</div>'+
+  '<div class="del" style="display:flex;gap:4px"><button class="btn sm ghost" data-act="editCat" data-t="out" data-c="'+esc(c)+'">Editar</button>'+(lk?'':'<button class="btn sm ghost danger" data-act="delCat" data-t="out" data-c="'+esc(c)+'">Excluir</button>')+'</div></div>'};
+ const rowIn=c=>{const u=catUse(c,'in'),lk=LOCKED_CATS.includes(c);
+  return '<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><div style="min-width:0"><div class="t">'+esc(c)+' '+(lk?lockTag:'')+'</div><div class="s">'+u+' uso'+(u===1?'':'s')+(c==='Renda da família'?' · separa a renda da família no Orçamento e nos Dízimos':'')+'</div></div>'+
+  '<div class="del" style="display:flex;gap:4px">'+(lk?'':'<button class="btn sm ghost" data-act="editCat" data-t="in" data-c="'+esc(c)+'">Renomear</button><button class="btn sm ghost danger" data-act="delCat" data-t="in" data-c="'+esc(c)+'">Excluir</button>')+'</div></div>'};
+ return top('Configurações','Categorias','<button class="btn sm ghost" data-go="orc">← Orçamento</button>')+
+ '<div class="grid g32"><section class="card"><div class="hd"><h2>Categorias de gastos</h2><button class="btn sm primary" data-act="addCat" data-t="out">+ Nova</button></div>'+
+  '<div class="list">'+CAT_OUT.map(rowOut).join('')+'</div>'+
+  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Soma dos percentuais: <b class="'+(Math.abs(tot-100)<0.5?'pos':'wrn')+'">'+tot+'%</b>'+(Math.abs(tot-100)<0.5?'':' (o ideal é fechar 100%)')+'.</p></section>'+
+ '<section class="card"><div class="hd"><h2>Categorias de entradas</h2><button class="btn sm primary" data-act="addCat" data-t="in">+ Nova</button></div><div class="list">'+CAT_IN.map(rowIn).join('')+'</div>'+
+  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Ao renomear, todos os lançamentos, contas fixas e parcelas com essa categoria mudam juntos. Ao excluir, eles passam para "Outros". As categorias marcadas como <b>fixa</b> são usadas em cálculos e não podem ser apagadas.</p></section></div>';
+}
+function formCat(type,name){
+ ensureCats();const d=type==='out'&&name?catDef(name):null;
+ openSheet(name?(type==='out'?'Editar categoria':'Renomear categoria'):'Nova categoria de '+(type==='out'?'gasto':'entrada'),'<div class="form">'+
+  '<label class="f full">Nome<input name="name" maxlength="40" value="'+esc(name||'')+'"'+(LOCKED_CATS.includes(name)?' readonly':'')+'></label>'+
+  (type==='out'?'<label class="f full">O que entra nela<input name="desc" maxlength="140" value="'+esc(d?d.desc:'')+'" placeholder="Ex.: ração, veterinário, banho e tosa"></label><label class="f">% recomendado da renda<input name="pct" type="number" inputmode="decimal" min="0" max="100" step="1" value="'+(name?budPct(name):0)+'"></label>':'')+
+  '</div>',f=>{
+  const nn=f.name.value.trim().replace(/\s+/g,' ');
+  if(!nn){f.name.focus();toast('Escreva o nome da categoria');return false}
+  const list=type==='out'?S.cats.out.map(c=>c.name):S.cats.in;
+  if(nn!==name&&list.some(x=>x.toLowerCase()===nn.toLowerCase())){toast('Já existe uma categoria com esse nome');return false}
+  if(type==='out'){
+   const pct=Math.max(0,Math.min(100,num(f.pct.value))),desc=f.desc.value.trim();
+   if(name){const c=catDef(name);c.name=nn;c.desc=desc;c.pct=pct;if(S.budget)delete S.budget[name];if(nn!==name)renameCatEverywhere('out',name,nn)}
+   else S.cats.out.push({name:nn,desc,pct});
+  }else{
+   if(name){S.cats.in=S.cats.in.map(x=>x===name?nn:x);if(nn!==name)renameCatEverywhere('in',name,nn)}
+   else S.cats.in.push(nn);
+  }
+  S.demo=false;commit(name?'Categoria atualizada':'Categoria criada');
+ });
+}
+function delCat(type,name){
+ ensureCats();
+ const fallback='Outros';
+ if(type==='out'){if(!S.cats.out.some(c=>c.name===fallback)&&name!==fallback)S.cats.out.push({name:fallback,desc:'Gastos que não se encaixam nas outras categorias.',pct:0});S.cats.out=S.cats.out.filter(c=>c.name!==name);if(S.budget)delete S.budget[name]}
+ else{if(!S.cats.in.includes(fallback)&&name!==fallback)S.cats.in.push(fallback);S.cats.in=S.cats.in.filter(c=>c!==name)}
+ const to=name===fallback?(type==='out'?(S.cats.out[0]||{}).name:S.cats.in[0]):fallback;
+ if(to)renameCatEverywhere(type,name,to);
+ S.demo=false;commit('Categoria excluída');
 }
 
 /* Dízimos e ofertas — um cálculo por entrada */
@@ -1354,7 +1429,7 @@ document.addEventListener('click',e=>{
  else if(a==='oPrev'){orcMonth=addM(orcMonth,-1);render()}
  else if(a==='oNext'){orcMonth=addM(orcMonth,1);render()}
  else if(a==='togFam'){S.budgetFamily=S.budgetFamily===false;commit(S.budgetFamily?'Renda da família somada':'Usando só o seu salário')}
- else if(a==='resetBud'){S.budget={};commit('Percentuais padrão restaurados')}
+ else if(a==='resetBud'){S.budget={};if(S.cats&&S.cats.out)S.cats.out.forEach(c=>{c.pct=BUDGET[c.name]?BUDGET[c.name][0]:0});commit('Percentuais padrão restaurados')}
  else if(a==='logout'){closeSheetQuiet();window.scrollTo(0,0);if(AUTH)AUTH.signOut();else{locked=true;render()}}
  else if(a==='news')showNews();
  else if(a==='hideGuide'){try{localStorage.setItem('cofre-guia-ok','1')}catch(err){}render();toast('O manual continua no menu: 📘 Como usar')}
@@ -1373,6 +1448,9 @@ document.addEventListener('click',e=>{
  else if(a==='dzPayAll'){const rs=titheRows(dizMonth).filter(x=>x.inc&&!x.paid);rs.forEach(r=>dzPayRow(dizMonth,r));offersFor(dizMonth).filter(x=>!x.paid).forEach(x=>{payOffer(dizMonth,x.id);rs.push(x)});S.demo=false;commit(rs.length+' entrada'+(rs.length>1?'s':'')+' marcada'+(rs.length>1?'s':'')+' como devolvida'+(rs.length>1?'s':''))}
  else if(a==='dzUndo'){const T=tithe(),p=(T.pr[dizMonth]||{})[b.dataset.k];if(p){S.tx=S.tx.filter(t=>!(p.tx||[]).includes(t.id));delete T.pr[dizMonth][b.dataset.k];commit('Registro desfeito')}}
  else if(a==='addOffer')formOffer();
+ else if(a==='addCat')formCat(b.dataset.t,null);
+ else if(a==='editCat')formCat(b.dataset.t,b.dataset.c);
+ else if(a==='delCat'){if(delArm!==b){delArm=b;b.textContent='Confirmar';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Excluir'}},3000);return}delArm=null;delCat(b.dataset.t,b.dataset.c)}
  else if(a==='editOffer'){const x=(tithe().extra||[]).find(o=>o.id===id);if(x)formOffer({...x})}
  else if(a==='payOffer'){payOffer(dizMonth,id);commit('Oferta registrada em Doações')}
  else if(a==='undoOffer'){const x=(tithe().extra||[]).find(o=>o.id===id),p=x&&x.paid&&x.paid[dizMonth];if(p){S.tx=S.tx.filter(t=>!(p.tx||[]).includes(t.id));delete x.paid[dizMonth];commit('Registro desfeito')}}
@@ -1408,7 +1486,7 @@ document.addEventListener('change',e=>{
  if(e.target.dataset&&e.target.dataset.dzinc){dzSetOv(dizMonth,e.target.dataset.dzinc,{off:e.target.checked?undefined:true});commit(e.target.checked?'Entrada incluída':'Entrada fora do dízimo');return}
  if(e.target.id==='offRange'){tithe().offer=num(e.target.value);S.demo=false;commit('Oferta: '+String(e.target.value).replace('.',',')+'%');return}
  const c=e.target.dataset&&e.target.dataset.bud;if(!c)return;
- S.budget=S.budget||{};S.budget[c]=Math.max(0,Math.min(100,num(e.target.value)));S.demo=false;commit('Percentual de '+c+' atualizado');
+ S.budget=S.budget||{};{const v=Math.max(0,Math.min(100,num(e.target.value))),d=catDef(c);if(d){d.pct=v;delete S.budget[c]}else S.budget[c]=v}S.demo=false;commit('Percentual de '+c+' atualizado');
 });
 document.addEventListener('submit',async e=>{
  if(e.target.id==='authForm'){e.preventDefault();if(!authBusy)doAuth();return}
