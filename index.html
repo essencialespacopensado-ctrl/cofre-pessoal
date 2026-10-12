@@ -337,8 +337,10 @@ const MN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez
 function mLabel(m,long){const[y,mo]=m.split('-').map(Number);return long?['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mo-1]+' '+y:MN[mo-1]+'/'+String(y).slice(2)}
 const fmt=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const fmt0=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
-function R(v){return fmt.format(v||0)}
-function R0(v){return fmt0.format(v||0)}
+let HIDE=false;try{HIDE=localStorage.getItem('cofre-ocultar')==='1'}catch(e){}
+function R(v){return HIDE?'R$ •••••':fmt.format(v||0)}
+function R0(v){return HIDE?'R$ •••':fmt0.format(v||0)}
+function eyeBtn(){return '<button class="btn sm ghost" data-act="eye" title="'+(HIDE?'Mostrar valores':'Esconder valores')+'" aria-pressed="'+HIDE+'">'+(HIDE?'🙈 Mostrar saldo':'👁️ Esconder saldo')+'</button>'}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
 function num(v){const n=parseFloat(v);return isFinite(n)?n:0}
@@ -656,8 +658,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.10';
+const APP_VERSION='2.11';
 const CHANGELOG=[
+ ['2.11','12/10/2026',['Botão 👁️ Esconder saldo: esconde todos os valores do app (fica lembrado neste aparelho).']],
  ['2.10','12/10/2026',['Acordo informal: opção "Abri mão do FGTS" — o FGTS sai do balanço e da comparação com a CLT.']],
  ['2.9','12/10/2026',['Acordo informal: data em que começou, "ainda trabalho aqui" e o que já recebeu (13º e férias de cada período).','Balanço pela referência da CLT: quanto falta de 13º e férias, férias vencendo ou vencidas (em dobro), proporcionais e FGTS.']],
  ['2.8','12/10/2026',['"Acordo com o patrão" agora se chama "Acordo informal".']],
@@ -858,7 +861,7 @@ function render(){
  if(view==='admin'&&!ME.owner)view='painel';
  buildNav();
  const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,trab:vTrab,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
- const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
+ const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+eyeBtn()+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+asBar()+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
 }
@@ -884,7 +887,7 @@ function vPainel(){
  (guideOk?'':'<section class="card guidecard"><div class="gc-ic">'+icon('estudo')+'</div><div style="min-width:0;flex:1"><h2>Primeira vez aqui?</h2><p class="muted" style="margin:4px 0 0">Veja o passo a passo com fotos de cada tela. Em 10 minutos seu mês fica organizado.</p></div><div class="gc-act"><a class="btn primary" href="manual.html" style="text-decoration:none">📘 Ver passo a passo</a><button class="btn sm ghost" data-act="hideGuide">Já sei usar</button></div></section>')+
  '<div class="grid g32">'+
   '<section class="card hero"><div class="hero-row"><div style="min-width:0">'+(bal!=null?
-   '<div class="kpi"><div class="lb">Saldo em conta</div></div><div class="big '+(bal>=0?'':'neg')+'">'+R(bal)+'</div>'+
+   '<div class="kpi"><div class="lb" style="display:flex;align-items:center;gap:8px">Saldo em conta <button class="btn sm ghost" data-act="eye" style="padding:2px 8px" aria-label="'+(HIDE?'Mostrar valores':'Esconder valores')+'">'+(HIDE?'🙈':'👁️')+'</button></div></div><div class="big '+(bal>=0?'':'neg')+'">'+R(bal)+'</div>'+
    '<div class="muted" style="margin-top:6px;font-size:14px">Resultado de '+mLabel(CUR)+' até hoje: <b class="mono '+(x.saldo-pend>=0?'pos':'neg')+'">'+(x.saldo-pend>=0?'+':'')+R(x.saldo-pend)+'</b> · Saldo inicial '+R0(S.initial.val)+' em '+mLabel(S.initial.month)+' <button class="btn sm ghost" data-act="editInit" style="padding:2px 8px">Editar</button></div>'
    :'<div class="kpi"><div class="lb">Resultado do mês</div></div><div class="big '+(x.saldo>=0?'':'neg')+'">'+R(x.saldo)+'</div>'+
    '<div style="margin-top:8px"><button class="btn sm" data-act="editInit">Informar saldo inicial</button></div>')+
@@ -938,7 +941,7 @@ function chart(P){
  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:480px;height:auto" role="img" aria-label="Previsão de sobra e parcelas nos próximos 12 meses">'+g+'</svg>';
 }
 function nice(x){const e=Math.pow(10,Math.floor(Math.log10(x)));const f=x/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e}
-function short(v){const a=Math.abs(v);return (v<0?'-':'')+(a>=1000?(a/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+'k':Math.round(a))}
+function short(v){if(HIDE)return '•••';const a=Math.abs(v);return (v<0?'-':'')+(a>=1000?(a/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+'k':Math.round(a))}
 function insights(){
  const x=month(CUR),out=[];const inc=x.inFix||x.entradas;
  if(!inc){out.push(['accent','Cadastre sua <b>renda fixa</b> em Fixas para eu calcular quanto sobra e quanto tempo levam suas metas.']);return out}
@@ -1994,6 +1997,7 @@ document.addEventListener('click',e=>{
  else if(a==='editRec')formRec({...find('rec',id)});
  else if(a==='addInst')formInst();
  else if(a==='editInst')formInst({...find('inst',id)});
+ else if(a==='eye'){HIDE=!HIDE;try{localStorage.setItem('cofre-ocultar',HIDE?'1':'0')}catch(e){}render();toast(HIDE?'Valores escondidos':'Valores visíveis')}
  else if(a==='addInIn')formInIn();
  else if(a==='editClt')formClt();
  else if(a==='cltOff'){if(S.clt){S.clt.on=false;S.demo=false;commit('CLT desligado')}}
