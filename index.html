@@ -482,8 +482,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.4';
+const APP_VERSION='2.5';
 const CHANGELOG=[
+ ['2.5','12/10/2026',['Lançamentos: cada mês (inclusive os futuros) mostra o salário, as contas fixas e as parcelas previstas.']],
  ['2.4','12/10/2026',['Entradas parceladas: "Falta receber" só desconta a parcela depois que ela cai.','Painel: "Como vou estar em…" — escolha mês e ano e veja o saldo previsto, com projeção mês a mês.','Painel: previsão do que entra no próximo mês (salário e parcelas).']],
  ['2.3','12/10/2026',['Resumo do link compartilhado atualizado (sem dízimo).']],
  ['2.2','12/10/2026',['Entradas previstas: salário, entradas fixas e parceladas só entram no saldo em conta no dia delas. Até lá aparecem como "A receber" (aba A pagar e Painel), com botão Recebi.']],
@@ -782,9 +783,20 @@ function vLanc(){
  const x=month(lancMonth);
  return top('Lançamentos','Entradas e gastos','<button class="btn sm" data-go="cats">⚙️ Categorias</button>'+'<button class="btn primary" data-act="addTx">'+icon('lanc')+'Novo lançamento</button>')+
  '<section class="card"><div class="hd"><div class="monthnav"><button class="btn sm ghost" data-act="mPrev" aria-label="Mês anterior">‹</button><h2 style="min-width:150px;text-align:center">'+mLabel(lancMonth,true)+'</h2><button class="btn sm ghost" data-act="mNext" aria-label="Próximo mês">›</button></div>'+
- '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip good">+ '+R(x.inVar)+'</span><span class="chip bad">− '+R(x.outVar)+'</span></div></div>'+
+ '<div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip good" title="Total de entradas do mês">+ '+R(x.entradas)+'</span><span class="chip bad" title="Total de saídas do mês">− '+R(x.saidas)+'</span></div></div>'+
  '<div class="list">'+(list.length?list.map(t=>txRow(t)).join(''):'<div class="empty">Nada lançado em '+mLabel(lancMonth,true)+'. Toque em <b>Novo lançamento</b> para começar.</div>')+'</div>'+
- '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Contas fixas e parcelas entram sozinhas no cálculo do mês. Aqui ficam só os gastos e entradas avulsos.</p></section>';
+ '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Aqui em cima ficam os gastos e entradas avulsos que você lançou.</p></section>'+autoSec(lancMonth);
+}
+function autoSec(m){
+ const it=[];const fut=diffM(CUR,m)>0;
+ receipts(m).filter(r=>!r.tx).forEach(r=>{const id=r.key.split(':')[2];it.push({day:r.day,name:r.name,kind:r.kind+(r.from?' · de '+r.from:''),val:r.val,inn:true,st:r.got?['good','Recebido']:['acc','Previsto'],act:r.key.indexOf(':ini:')>0?'editInIn':'editRec',id})});
+ S.rec.filter(r=>r.type==='out'&&recActive(r,m)).forEach(r=>it.push({day:r.day||1,name:r.desc,kind:'Conta fixa'+(cardById(r.cardId)?' · cartão '+cardById(r.cardId).name:''),val:num(r.val),inn:false,st:fut?['acc','Previsto']:['','Fixa'],act:'editRec',id:r.id}));
+ S.inst.filter(i=>instInMonth(i,m)).forEach(i=>it.push({day:i.day||10,name:i.desc,kind:'Parcela '+(diffM(i.first,m)+1)+'/'+i.n+(cardById(i.cardId)?' · cartão '+cardById(i.cardId).name:''),val:instParcel(i),inn:false,st:fut?['acc','Previsto']:['','Parcela'],act:'editInst',id:i.id}));
+ it.sort((a,b)=>a.day-b.day);
+ const ti=it.filter(x=>x.inn).reduce((a,x)=>a+x.val,0),to=it.filter(x=>!x.inn).reduce((a,x)=>a+x.val,0);
+ return '<section class="card" style="margin-top:16px"><div class="hd"><h2>'+(fut?'🔮 Previstos para ':'🔁 Automáticos de ')+mLabel(m,true)+'</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip good">+ '+R(ti)+'</span><span class="chip bad">− '+R(to)+'</span></div></div>'+
+  '<div class="list">'+(it.length?it.map(x=>'<div class="row"><div class="ic '+(x.inn?'in':'out')+'">'+String(x.day).padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(x.name)+'</div><div class="s">'+esc(x.kind)+' · dia '+String(x.day).padStart(2,'0')+'/'+m.slice(5,7)+'</div></div><div class="v '+(x.inn?'pos':'')+'">'+(x.inn?'+':'−')+R(x.val)+'</div><div class="del" style="display:flex;gap:6px;align-items:center">'+(x.st[0]?'<span class="chip '+x.st[0]+'">'+x.st[1]+'</span>':'<span class="chip">'+x.st[1]+'</span>')+'<button class="btn sm ghost" data-act="'+x.act+'" data-id="'+x.id+'">Editar</button></div></div>').join(''):'<div class="empty">Nenhuma conta fixa, salário ou parcela neste mês.</div>')+'</div>'+
+  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Salário, contas fixas e parcelas (compras e entradas) entram sozinhos todo mês. Para mudar, toque em <b>Editar</b> ou vá em <b>Fixas</b> / <b>Parcelados</b>.</p></section>';
 }
 function txRow(t){
  const dd=t.date.slice(8,10)+'/'+t.date.slice(5,7);
