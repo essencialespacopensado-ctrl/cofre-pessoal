@@ -256,6 +256,8 @@ svg text{font-family:var(--f-mono)}
 }
 @media (max-width:420px){.g4{grid-template-columns:1fr 1fr}.kpi .vl{font-size:19px}}
 @media (prefers-reduced-motion:no-preference){.view{animation:in .35s ease}@keyframes in{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}}
+.projm{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;color-scheme:dark}:root[data-theme=light] .projm{color-scheme:light}@media(max-width:600px){.ptab td,.ptab th{padding:7px 6px;font-size:12.5px}}
+.ptab{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}.ptab th{position:sticky;top:0;background:var(--panel);text-align:right;font-weight:600;color:var(--muted);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--line)}.ptab th:first-child,.ptab td:first-child{text-align:left}.ptab td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}.ptab tr.cur td{background:color-mix(in srgb,var(--accent) 8%,transparent)}.ptab .pos{color:var(--good)}.ptab .neg{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -389,6 +391,30 @@ function balanceAt(m){
  if(diffM(ini.month,m)<0)return num(ini.val);
  let b=num(ini.val);for(let k=ini.month;diffM(k,m)>=0;k=addM(k,1))b+=month(k).saldo-(diffM(k,CUR)<=0?pendingIn(k):0);return b;
 }
+/* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
+let projMonth=null;
+function projRows(to){
+ const av=avgVarOut();let b=balanceAt(CUR);const hasBal=b!=null;if(!hasBal)b=0;b+=pendingIn(CUR);
+ const rows=[];const cx=month(CUR);rows.push({m:CUR,ent:cx.entradas,sai:cx.saidas,sobra:cx.saldo,saldo:b,inFix:cx.inFix,inParc:cx.inParc||0,outFix:cx.outFix,parc:cx.parc,vari:cx.outVar,cur:true});
+ for(let m=addM(CUR,1),k=0;diffM(m,to)>=0&&k<120;m=addM(m,1),k++){const x=month(m);const vari=Math.max(x.outVar,av);const ent=x.inFix+x.inVar,sai=x.outFix+x.parc+vari;b+=ent-sai;
+  rows.push({m,ent,sai,sobra:ent-sai,saldo:b,inFix:x.inFix,inParc:x.inParc||0,outFix:x.outFix,parc:x.parc,vari})}
+ rows.hasBal=hasBal;return rows;
+}
+function vProj(){
+ const to=projMonth||addM(CUR,1);const rows=projRows(to);const last=rows[rows.length-1];const nx=receipts(addM(CUR,1));
+ const max=addM(CUR,120);
+ return '<section class="card" style="margin-top:16px" id="projCard"><div class="hd"><h2>🔮 Como vou estar em…</h2><label style="display:flex;gap:8px;align-items:center" class="muted">Mês e ano <input id="projM" type="month" min="'+addM(CUR,1)+'" max="'+max+'" value="'+to+'" class="projm"></label></div>'+
+  '<div class="grid g4" style="margin-bottom:14px">'+
+   kpi('Saldo previsto no fim de '+mLabel(to),R(last.saldo),rows.hasBal?'saldo de hoje + o que vai entrar − o que vai sair':'informe o saldo inicial para ficar exato',last.saldo>=0?'pos':'neg')+
+   kpi('Entra em '+mLabel(to),R(last.ent),last.inParc?'inclui '+R0(last.inParc)+' de entradas parceladas':'salário e entradas fixas','pos')+
+   kpi('Sai em '+mLabel(to),R(last.sai),'fixas '+R0(last.outFix)+' · parcelas '+R0(last.parc)+' · dia a dia ~'+R0(last.vari),'neg')+
+   kpi('Sobra de '+mLabel(to),R(last.sobra),last.sobra>=0?'o que sobra no mês':'vai faltar neste mês',last.sobra>=0?'pos':'neg')+'</div>'+
+  '<div style="overflow:auto;max-height:340px"><table class="ptab"><thead><tr><th>Mês</th><th>Entra</th><th>Sai</th><th>Sobra</th><th>Saldo no fim</th></tr></thead><tbody>'+
+   rows.map(r=>'<tr'+(r.cur?' class="cur"':'')+'><td>'+mLabel(r.m)+(r.cur?' <span class="muted">(atual)</span>':'')+'</td><td class="pos">'+R0(r.ent)+'</td><td class="neg">'+R0(r.sai)+'</td><td class="'+(r.sobra>=0?'pos':'neg')+'">'+R0(r.sobra)+'</td><td class="'+(r.saldo>=0?'':'neg')+'"><b>'+R0(r.saldo)+'</b></td></tr>').join('')+'</tbody></table></div>'+
+  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Entra = salário, entradas fixas, parceladas e avulsas já lançadas. Sai = contas fixas + parcelas + média dos seus gastos do dia a dia (últimos 3 meses). Mês atual: só o que já está lançado.</p>'+
+  (nx.length?'<div class="hd" style="margin-top:18px"><h2>Previsto para entrar em '+mLabel(addM(CUR,1),true)+'</h2><span class="muted mono" style="font-size:12px">'+R0(nx.reduce((a,r)=>a+r.val,0))+'</span></div><div class="list">'+nx.map(r=>'<div class="row" style="grid-template-columns:auto minmax(0,1fr) auto"><div class="ic" style="color:var(--accent)">'+String(r.day).padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(r.name)+'</div><div class="s">'+esc(r.kind)+(r.from?' · de '+esc(r.from):'')+'</div></div><div class="v pos">'+R(r.val)+'</div></div>').join('')+'</div>':'')+
+  '</section>';
+}
 function balanceProj(n){ // saldo previsto daqui a n meses
  const b=balanceAt(CUR)+pendingIn(CUR);if(b==null)return null;let s=b;for(let k=1;k<=n;k++)s+=projSobra(addM(CUR,k));return s;
 }
@@ -456,8 +482,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.3';
+const APP_VERSION='2.4';
 const CHANGELOG=[
+ ['2.4','12/10/2026',['Entradas parceladas: "Falta receber" só desconta a parcela depois que ela cai.','Painel: "Como vou estar em…" — escolha mês e ano e veja o saldo previsto, com projeção mês a mês.','Painel: previsão do que entra no próximo mês (salário e parcelas).']],
  ['2.3','12/10/2026',['Resumo do link compartilhado atualizado (sem dízimo).']],
  ['2.2','12/10/2026',['Entradas previstas: salário, entradas fixas e parceladas só entram no saldo em conta no dia delas. Até lá aparecem como "A receber" (aba A pagar e Painel), com botão Recebi.']],
  ['2.1','11/10/2026',['Entradas parceladas: cadastre dinheiro que vai receber em parcelas (aba Parcelados). Cada parcela entra sozinha na renda do mês, na previsão e no dízimo.']],
@@ -593,7 +620,9 @@ function instStatus(i){
 }
 function inInMonth(i,m){const k=diffM(i.first,m);return k>=0&&k<i.n}
 function inParcel(i){return num(i.total)/Math.max(1,i.n)}
-function inStatus(i){const p=inParcel(i),k=diffM(i.first,CUR),got=Math.max(0,Math.min(i.n,k+1)),rem=i.n-got;return {p,got,rem,remVal:rem*p,end:addM(i.first,i.n-1),curK:k}}
+function inGot(i,m){const g=(S.got||{})[m+':ini:'+i.id];if(g!=null)return !!g;const d=diffM(m,CUR);return d>0||(d===0&&(i.day||10)<=TODAY.getDate())}
+function inStatus(i){const p=inParcel(i),k=diffM(i.first,CUR);const flags=Array.from({length:i.n},(_,j)=>inGot(i,addM(i.first,j)));const got=flags.filter(Boolean).length,rem=i.n-got;
+ const nextK=flags.findIndex(f=>!f);return {p,got,rem,remVal:rem*p,end:addM(i.first,i.n-1),curK:k,flags,next:nextK>=0?addM(i.first,nextK):null}}
 function recActive(r,m){return !r.start||diffM(r.start,m)>=0}
 function month(m){
  const inParc=(S.instIn||[]).filter(i=>inInMonth(i,m)).reduce((a,i)=>a+inParcel(i),0);
@@ -680,6 +709,7 @@ function vPainel(){
    '<div style="margin-top:8px"><button class="btn sm" data-act="editInit">Informar saldo inicial</button></div>')+
    '<div class="muted" style="margin-top:6px;font-size:14px">Entrou <b class="pos mono">'+R(x.entradas-pend)+'</b>'+(pend>0?' · A receber <b class="mono" style="color:var(--accent)">'+R(pend)+'</b> <span style="font-size:12px">(previsto)</span>':'')+' · Saiu <b class="neg mono">'+R(x.saidas)+'</b></div>'+
    (pend>0&&bal!=null?'<div class="muted" style="margin-top:4px;font-size:13px">Saldo previsto quando tudo cair: <b class="mono">'+R(bal+pend)+'</b> · <a href="#" data-go="pagar" style="color:var(--accent)">ver o que falta receber</a></div>':'')+
+   '<div style="margin-top:8px"><a href="#projCard" class="chip good" style="text-decoration:none">Previsto para entrar em '+mLabel(addM(CUR,1))+': '+R0(month(addM(CUR,1)).inFix)+'</a></div>'+
    (bal!=null?'<div style="margin-top:8px"><span class="chip '+(balanceProj(12)>=0?'acc':'bad')+'">Saldo previsto em '+mLabel(addM(CUR,12))+': '+R0(balanceProj(12))+'</span></div>':'')+
    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'+(sobraProj>=0?'<span class="chip good">Sobra prevista p/ '+mLabel(addM(CUR,1))+': '+R0(sobraProj)+'</span>':'<span class="chip bad">Falta prevista p/ '+mLabel(addM(CUR,1))+': '+R0(-sobraProj)+'</span>')+(df?'<span class="chip acc">Sem parcelas em '+mLabel(df,true)+'</span>':'<span class="chip good">Sem parcelas</span>')+'</div></div>'+
    ring(comp,gaugeCol)+'</div></section>'+
@@ -698,6 +728,7 @@ function vPainel(){
   '<section class="card"><div class="hd"><h2>Falta pagar este mês</h2><button class="btn sm ghost" data-go="pagar">Ver tudo ›</button></div><div class="list">'+
    (venc.length?venc.map(v=>'<div class="row" style="grid-template-columns:auto minmax(0,1fr) auto"><div class="ic out">'+String(v.day).padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(v.t)+'</div><div class="s '+(v.day<d?'neg':'')+'">'+esc(v.k)+(v.day<d?' · atrasada':'')+'</div></div><div class="v">'+R(v.v)+'</div></div>').join(''):'<div class="empty">Tudo pago este mês.</div>')+'</div></section>'+
  '</div>'+
+ vProj()+
  '<section class="card" style="margin-top:16px"><div class="hd"><h2>Diagnóstico automático</h2><span class="chip acc">baseado nos seus números</span></div>'+insights().map(i=>'<div class="insight"><span class="dot" style="background:var(--'+i[0]+')"></span><div>'+i[1]+'</div></div>').join('')+'</section>';
 }
 function kpi(l,v,s,c){return '<section class="card kpi"><div class="lb">'+l+'</div><div class="vl '+(c||'')+'">'+v+'</div><div class="sub">'+s+'</div></section>'}
@@ -1345,10 +1376,10 @@ function vParc(){
   '<div class="stats"><div><div class="lb">Falta pagar</div><div class="vl">'+R(s.remVal)+'</div></div><div><div class="lb">Quita em</div><div class="vl">'+mLabel(s.end)+'</div></div><div><div class="lb">'+(s.juros>0.5?'Juros total':'Valor total')+'</div><div class="vl '+(s.juros>0.5?'wrn':'')+'">'+R(s.juros>0.5?s.juros:s.totalPaid)+'</div></div></div>'+
   '<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editInst" data-id="'+i.id+'">Editar</button>'+delBtn('inst',i.id)+'</div></section>'};
  const ins=S.instIn||[],insAct=ins.filter(i=>inStatus(i).rem>0),insDone=ins.filter(i=>inStatus(i).rem<=0);
- const icard=i=>{const s=inStatus(i);return '<section class="card pcard"><div class="top"><div style="min-width:0"><div class="nm">'+esc(i.desc)+'</div><div class="muted" style="font-size:13px">'+esc(i.cat||'')+' · '+i.n+'x de '+R(s.p)+(i.from?' · de '+esc(i.from):'')+'</div></div>'+(s.rem>0?'<span class="chip good">'+s.rem+' a receber</span>':'<span class="chip good">Recebido</span>')+'</div>'+
-  '<div class="ticks">'+Array.from({length:i.n},(_,k)=>'<i class="'+(k<s.got-1||(k===s.got-1&&k!==s.curK)?'on':k===s.curK?'now':'')+'"></i>').join('')+'</div>'+
+ const icard=i=>{const s=inStatus(i);return '<section class="card pcard"><div class="top"><div style="min-width:0"><div class="nm">'+esc(i.desc)+'</div><div class="muted" style="font-size:13px">'+esc(i.cat||'')+' · '+i.n+'x de '+R(s.p)+(i.from?' · de '+esc(i.from):'')+'</div></div>'+(s.rem>0?'<span class="chip good">'+s.got+' de '+i.n+' recebida'+(s.got===1?'':'s')+'</span>':'<span class="chip good">Recebido</span>')+'</div>'+
+  '<div class="ticks">'+s.flags.map((f,k)=>'<i class="'+(f?'on':k===s.curK?'now':'')+'"></i>').join('')+'</div>'+
   '<div class="bar"><i style="width:'+(s.got/i.n*100)+'%"></i></div>'+
-  '<div class="stats"><div><div class="lb">Falta receber</div><div class="vl pos">'+R(s.remVal)+'</div></div><div><div class="lb">Última em</div><div class="vl">'+mLabel(s.end)+'</div></div><div><div class="lb">Valor total</div><div class="vl">'+R(i.total)+'</div></div></div>'+
+  '<div class="stats"><div><div class="lb">Falta receber</div><div class="vl pos">'+R(s.remVal)+'</div></div><div><div class="lb">'+(s.next?'Próxima':'Última em')+'</div><div class="vl">'+(s.next?String(i.day||10).padStart(2,'0')+'/'+s.next.slice(5,7)+'/'+s.next.slice(2,4):mLabel(s.end))+'</div></div><div><div class="lb">Valor total</div><div class="vl">'+R(i.total)+'</div></div></div>'+
   '<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editInIn" data-id="'+i.id+'">Editar</button>'+delBtn('instIn',i.id)+'</div></section>'};
  const inSec='<h2 style="margin:28px 0 12px">💰 Entradas parceladas</h2><p class="muted" style="margin:-6px 0 12px;font-size:13px">Dinheiro que você vai receber em parcelas (venda parcelada, acordo, empréstimo que te devolvem). Cada parcela entra sozinha na renda do mês e no dízimo.</p>'+
   (insAct.length?'<div class="grid g2">'+insAct.map(icard).join('')+'</div>':'<section class="card"><div class="empty">Nenhuma entrada parcelada. Toque em <b>+ Entrada parcelada</b> para cadastrar.</div></section>')+
@@ -1592,6 +1623,7 @@ function find(col,id){return S[col].find(x=>x.id===id)}
 
 /* ---------- eventos ---------- */
 let delArm=null;
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='projM'&&e.target.value){projMonth=e.target.value;render();const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})}});
 document.addEventListener('click',e=>{
  const ar=e.target.closest('[data-as-run]');if(ar){asRun(ar.dataset.asRun);if(window.innerWidth<=900)asClose();return}
  const aa=e.target.closest('[data-as-ask]');if(aa){AS_OPEN=true;asAsk(aa.dataset.asAsk);return}
