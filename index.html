@@ -204,6 +204,15 @@ body.locked main{max-width:none}
 .gc-ic svg{width:26px;height:26px}
 .gc-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media (max-width:760px){.mobilenav .navbtn.guide{margin-bottom:0}}
+.ukpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:10px}
+.ukpi{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.ukpi .lb{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.ukpi .vl{font-family:var(--f-display);font-size:22px;font-weight:600}
+.urow{grid-template-columns:auto minmax(0,1fr) auto}
+.uav{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:var(--panel2);border:2px solid var(--line);position:relative}
+.uav.on{border-color:var(--good)}
+.uav.on::after{content:"";position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:var(--good);border:2px solid var(--panel)}
+@media (max-width:760px){.ukpis{grid-template-columns:repeat(2,minmax(0,1fr))}.urow{grid-template-columns:auto minmax(0,1fr)}.urow .del{grid-column:1/-1}}
 .reply{margin-top:8px;padding:8px 12px;border-radius:10px;border-left:3px solid var(--accent);background:var(--panel2);font-size:13.5px}
 svg text{font-family:var(--f-mono)}
 .legend{display:flex;gap:16px;font-size:12px;color:var(--muted);flex-wrap:wrap}
@@ -377,6 +386,9 @@ let S=demoCards(demo());
 let view='painel', lancMonth=CUR, tipTab='gestao', storeRef=null, saveTimer=null, syncState='local';
 /* conta / login / sugestões */
 let ME={name:'',avatar:'',id:null,owner:false}, locked=true, ready=false, DB=null, USER=null, ideasRef=null, MY=null, ALL={}, NAMES={}, admFilter='abertas';
+let MEMBERS_ERR='', hbTimer=null;
+function startHeartbeat(){clearInterval(hbTimer);hbTimer=setInterval(()=>{if(document.hidden||!DB||!ME.id)return;DB.doc('members/'+ME.id).set({last:todayISO(),lastAt:Date.now()},{merge:true}).catch(()=>{})},5*60*1000)}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&DB&&ME.id&&!locked)DB.doc('members/'+ME.id).set({last:todayISO(),lastAt:Date.now()},{merge:true}).catch(()=>{})});
 let ACCESS='ok', MEMBERS={}, ACC={}, memberFirst=null, termsChecked=false;
 const TERMO=[
  ['Feito por uma pessoa leiga','Este aplicativo foi criado por uma pessoa leiga, sem formação em finanças ou em programação, com o único objetivo de ajudar na organização e na gestão pessoal do dinheiro.'],
@@ -401,8 +413,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='1.6';
+const APP_VERSION='1.7';
 const CHANGELOG=[
+ ['1.7','11/10/2026',['Desenvolvedor: lista de usuários mostra todos (inclusive você), com ativos, online agora, e-mail e último acesso.']],
  ['1.6','11/10/2026',['"Como usar" mais visível: item no menu, cartão de boas-vindas no Painel e botão na tela de entrar.']],
  ['1.5','11/10/2026',['Manual "Como usar" com fotos de todas as telas, aberto pelo botão 📘 Como usar.']],
  ['1.4','11/10/2026',['Dízimos: "Ofertas especiais" para adicionar ofertas diferentes (missões, construção, campanhas), só no mês ou todo mês.']],
@@ -469,7 +482,7 @@ async function startCloud(){
  },()=>{}));
  if(ME.owner){
   sub(db.collection('ideas').onSnapshot(q=>{const all={};q.docs.forEach(d=>{all[d.id]=((d.data()||{}).items||[]).map(x=>({...x}))});ALL=all;if(view==='admin')rerenderIdle()},()=>{}));
-  sub(db.collection('members').onSnapshot(q=>{const all={};q.docs.forEach(d=>{const x=d.data()||{};all[d.id]=x;NAMES[d.id]=x.name||x.email||''});MEMBERS=all;if(view==='admin')rerenderIdle()},()=>{}));
+  sub(db.collection('members').onSnapshot(q=>{const all={};q.docs.forEach(d=>{const x=d.data()||{};all[d.id]=x;NAMES[d.id]=x.name||x.email||''});MEMBERS=all;MEMBERS_ERR='';if(view==='admin')rerenderIdle()},e=>{MEMBERS_ERR=(e&&e.code)||'erro';if(view==='admin')rerenderIdle()}));
   sub(db.collection('access').onSnapshot(q=>{const all={};q.docs.forEach(d=>{all[d.id]=(d.data()||{}).status||'ok'});ACC=all;if(view==='admin')rerenderIdle()},()=>{}));
  }
  if(ACCESS!=='ok')return;
@@ -512,7 +525,8 @@ async function boot(){
   await startCloud();
   if(pendingTerms&&!S.termsAt){S.termsAt=todayISO();persist()}
   pendingTerms=false;pendingName='';
-  DB.doc('members/'+ME.id).set({first:memberFirst||todayISO(),last:todayISO(),name:ME.name,email:ME.email},{merge:true}).catch(()=>{});
+  DB.doc('members/'+ME.id).set({first:memberFirst||todayISO(),last:todayISO(),lastAt:Date.now(),name:ME.name,email:ME.email},{merge:true}).catch(()=>{});
+  startHeartbeat();
   locked=false;ready=true;render();
  });
 }
@@ -795,14 +809,14 @@ function vAdmin(){
   .sort((a,b)=>String(b.i.date).localeCompare(String(a.i.date)));
  const who=u=>u===ME.id?'Você':(NAMES[u]||'Usuário');
  const f=[['abertas','Em aberto'],['Nova','Novas'],['Em análise','Em análise'],['Feita','Feitas'],['todas','Todas']];
- return top('Desenvolvedor','Todas as sugestões dos usuários','<button class="btn sm" data-act="copyIdeas">Copiar em aberto</button>')+
- '<div class="grid g4" style="margin-bottom:16px">'+kpi('Em aberto',String(cnt.abertas),'aguardando você','')+kpi('Novas',String(cnt.Nova||0),'ainda não vistas','')+kpi('Em análise',String(cnt['Em análise']||0),'sendo avaliadas','wrn')+kpi('Usuários',String(users),'que mandaram sugestões','pos')+'</div>'+
+ return top('Desenvolvedor','Usuários e sugestões','<button class="btn sm" data-act="copyIdeas">Copiar sugestões em aberto</button>')+vUsers().replace('class="card" style="margin-top:16px"','class="card" style="margin-bottom:16px"')+'<h2 style="margin:8px 0 12px">Sugestões</h2>'+
+ '<div class="grid g4" style="margin-bottom:16px">'+kpi('Em aberto',String(cnt.abertas),'aguardando você','')+kpi('Novas',String(cnt.Nova||0),'ainda não vistas','')+kpi('Em análise',String(cnt['Em análise']||0),'sendo avaliadas','wrn')+kpi('Quem sugeriu',String(users),'usuários com sugestões','pos')+'</div>'+
  '<section class="card"><div class="hd"><div class="tabs" role="tablist">'+f.map(([k,l])=>'<button class="tab" role="tab" data-act="admFilter" data-f="'+k+'" aria-selected="'+(admFilter===k)+'">'+l+' <span class="mono muted">'+(k==='todas'?rows.length:cnt[k]||0)+'</span></button>').join('')+'</div></div><div class="list">'+
  (vis.length?vis.map(({u,i})=>'<div class="row" style="grid-template-columns:minmax(0,1fr)"><div style="min-width:0">'+ideaHead(i,'<b style="margin-right:4px">'+esc(who(u))+'</b>')+ideaText(i)+
   '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">'+['Nova','Em análise','Feita'].map(s=>'<button class="btn sm '+(i.status===s?'primary':'ghost')+'" data-act="admSet" data-u="'+u+'" data-id="'+i.id+'" data-s="'+s+'">'+s+'</button>').join('')+
   '<button class="btn sm ghost" data-act="admReply" data-u="'+u+'" data-id="'+i.id+'">'+(i.reply?'Editar resposta':'Responder')+'</button><button class="btn sm ghost danger" data-act="admDel" data-u="'+u+'" data-id="'+i.id+'">Excluir</button></div></div></div>').join('')
   :'<div class="empty">'+(DB?'Nenhuma sugestão nesse filtro.':'Sem conexão com a nuvem: abra o app pelo link do Claude para ver as sugestões.')+'</div>')+'</div>'+
- '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Só você vê esta tela. Para outras pessoas usarem o app, mande o link: cada uma cria a própria conta.</p></section>'+vUsers();
+ '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Só você vê esta tela. Para outras pessoas usarem o app, mande o link: cada uma cria a própria conta.</p></section>';
 }
 async function admWrite(u,fn){
  const items=(ALL[u]||[]).map(x=>({...x}));fn(items);ALL[u]=items;if(u===ME.id)MY=items;render();
@@ -817,19 +831,28 @@ function vBlocked(){
   '<p class="muted" style="margin:0">'+(p?'O desenvolvedor pausou seu acesso ao app por enquanto. Quando for liberado, esta tela some sozinha.':'O desenvolvedor removeu seu acesso a este app. Se acha que é um engano, fale com ele.')+'</p></div></div>';
 }
 function vUsers(){
- const ids=Object.keys(MEMBERS).filter(u=>u!==ME.id);
- const st=u=>ACC[u]||'ok';
- ids.sort((a,b)=>String((MEMBERS[b]||{}).last).localeCompare(String((MEMBERS[a]||{}).last)));
- const d=s=>s?String(s).split('-').reverse().join('/'):'—';
- return '<section class="card" style="margin-top:16px"><div class="hd"><h2>Usuários</h2><span class="muted mono" style="font-size:12px">'+ids.filter(u=>st(u)==='ok').length+' ativos · '+ids.filter(u=>st(u)==='paused').length+' pausados · '+ids.filter(u=>st(u)==='removed').length+' removidos</span></div><div class="list">'+
- (ids.length?ids.map(u=>{const m=MEMBERS[u]||{},s=st(u),n=(ALL[u]||[]).length;
-  return '<div class="row" style="grid-template-columns:auto minmax(0,1fr) auto"><div class="ic" style="color:var(--'+(s==='ok'?'good':s==='paused'?'warn':'bad')+')">'+esc((NAMES[u]||'U').slice(0,1).toUpperCase())+'</div>'+
-   '<div style="min-width:0"><div class="t">'+esc(NAMES[u]||'Usuário')+' <span class="chip '+(s==='ok'?'good':s==='paused'?'warn':'bad')+'" style="margin-left:4px">'+(s==='ok'?'Ativo':s==='paused'?'Pausado':'Removido')+'</span></div><div class="s">Desde '+d(m.first)+' · último acesso '+d(m.last)+' · '+n+' sugest'+(n===1?'ão':'ões')+'</div></div>'+
-   '<div class="del" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+
-   (s==='ok'?'<button class="btn sm" data-act="admUser" data-u="'+u+'" data-s="paused">Pausar</button>':'<button class="btn sm" data-act="admUser" data-u="'+u+'" data-s="ok">Reativar</button>')+
-   (s!=='removed'?'<button class="btn sm ghost danger" data-act="admUser" data-u="'+u+'" data-s="removed">Excluir</button>':'')+'</div></div>'}).join('')
- :'<div class="empty">'+(DB?'Ninguém além de você entrou no app ainda.':'Sem conexão com a nuvem.')+'</div>')+'</div>'+
- '<p class="muted" style="font-size:12.5px;margin:12px 0 0"><b>Pausar</b> bloqueia o uso do app até você reativar. <b>Excluir</b> bloqueia de vez e apaga os dados e as sugestões da pessoa. O bloqueio vale também no banco de dados: a pessoa não consegue ler nem gravar nada enquanto estiver pausada ou excluída.</p></section>';
+ const ids=Object.keys(MEMBERS);
+ const st=u=>u===ME.id?'ok':(ACC[u]||'ok');
+ const now=Date.now(),online=u=>(MEMBERS[u]||{}).lastAt&&now-MEMBERS[u].lastAt<12*60*1000;
+ const weekAgo=new Date(TODAY.getTime()-7*864e5).toISOString().slice(0,10);
+ ids.sort((a,b)=>(b===ME.id)-(a===ME.id)||(online(b)?1:0)-(online(a)?1:0)||((MEMBERS[b]||{}).lastAt||0)-((MEMBERS[a]||{}).lastAt||0));
+ const d=x=>x?String(x).split('-').reverse().join('/'):'—';
+ const ago=t=>{if(!t)return '';const m=Math.round((now-t)/60000);return m<1?'agora':m<60?'há '+m+' min':m<1440?'há '+Math.round(m/60)+' h':'há '+Math.round(m/1440)+' dia'+(Math.round(m/1440)>1?'s':'')};
+ const ativos=ids.filter(u=>st(u)==='ok').length,on=ids.filter(online).length,novos=ids.filter(u=>((MEMBERS[u]||{}).first||'')>=weekAgo).length;
+ const kp=(l,v,c)=>'<div class="ukpi"><div class="lb">'+l+'</div><div class="vl '+(c||'')+'">'+v+'</div></div>';
+ let body;
+ if(MEMBERS_ERR)body='<div class="empty" style="text-align:left">O banco não liberou a lista de usuários ('+esc(MEMBERS_ERR)+'). Saia e entre de novo no app com a conta do desenvolvedor, depois de confirmar o e-mail.</div>';
+ else if(!ids.length)body='<div class="empty">'+(DB?'Carregando usuários…':'Sem conexão com a nuvem.')+'</div>';
+ else body=ids.map(u=>{const m=MEMBERS[u]||{},s=st(u),n=(ALL[u]||[]).length,me=u===ME.id,ol=online(u);
+  const nm=me?(ME.name||m.name||'Você'):(m.name||NAMES[u]||'Usuário');
+  return '<div class="row urow"><div class="uav'+(ol?' on':'')+'">'+esc(nm.trim().slice(0,1).toUpperCase())+'</div>'+
+   '<div style="min-width:0"><div class="t">'+esc(nm)+(me?' <span class="chip acc">você · desenvolvedor</span>':'')+' <span class="chip '+(s==='ok'?'good':s==='paused'?'warn':'bad')+'">'+(s==='ok'?'Ativo':s==='paused'?'Pausado':'Removido')+'</span>'+(ol?' <span class="chip good">● online</span>':'')+'</div>'+
+   '<div class="s">'+(m.email?esc(m.email)+' · ':'')+'desde '+d(m.first)+' · último acesso '+(m.lastAt?ago(m.lastAt):d(m.last))+' · '+n+' sugest'+(n===1?'ão':'ões')+'</div></div>'+
+   '<div class="del" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+(me?'':(s==='ok'?'<button class="btn sm" data-act="admUser" data-u="'+u+'" data-s="paused">Pausar</button>':'<button class="btn sm" data-act="admUser" data-u="'+u+'" data-s="ok">Reativar</button>')+(s!=='removed'?'<button class="btn sm ghost danger" data-act="admUser" data-u="'+u+'" data-s="removed">Excluir</button>':''))+'</div></div>'}).join('');
+ return '<section class="card" style="margin-top:16px"><div class="hd"><h2>Usuários</h2><span class="muted" style="font-size:12.5px">atualiza sozinho</span></div>'+
+  '<div class="ukpis">'+kp('Total',ids.length)+kp('Ativos',ativos,'pos')+kp('Online agora',on,on?'pos':'')+kp('Novos em 7 dias',novos)+'</div>'+
+  '<div class="list">'+body+'</div>'+
+  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Cada pessoa aparece aqui depois de entrar pela primeira vez. "Online" = usou o app nos últimos minutos. <b>Pausar</b> bloqueia o uso até você reativar. <b>Excluir</b> bloqueia de vez e apaga os dados e sugestões da pessoa. O bloqueio vale também no banco de dados.</p></section>';
 }
 async function admUser(u,s){
  ACC[u]=s;render();
