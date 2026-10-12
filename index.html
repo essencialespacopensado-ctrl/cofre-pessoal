@@ -213,6 +213,22 @@ body.locked main{max-width:none}
 .uav.on{border-color:var(--good)}
 .uav.on::after{content:"";position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:var(--good);border:2px solid var(--panel)}
 @media (max-width:760px){.ukpis{grid-template-columns:repeat(2,minmax(0,1fr))}.urow{grid-template-columns:auto minmax(0,1fr)}.urow .del{grid-column:1/-1}}
+.asbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:6px 6px 6px 14px;border-radius:14px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 10%,var(--panel)),var(--panel));box-shadow:0 6px 24px var(--glow)}
+.asbar input{flex:1;min-width:0;border:0;background:none;color:var(--fg);font:500 15px var(--f-body);padding:8px 0;outline:none}
+.asbar input::placeholder{color:var(--muted)}
+.asbar:focus-within{border-color:var(--accent)}
+.aspanel{position:fixed;right:16px;top:calc(16px + env(safe-area-inset-top,0px));bottom:16px;width:min(420px,calc(100vw - 32px));z-index:45;display:flex;flex-direction:column;background:var(--panel);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden}
+.as-hd{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.as-body{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.as-msg{max-width:88%;padding:10px 13px;border-radius:14px;font-size:14.5px;line-height:1.5}
+.as-msg.bot{background:var(--panel2);border:1px solid var(--line);align-self:flex-start;border-bottom-left-radius:4px}
+.as-msg.me{align-self:flex-end;color:#04101c;background:linear-gradient(135deg,var(--accent),var(--accent2));border-bottom-right-radius:4px}
+.as-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.as-sug{display:flex;gap:6px;overflow-x:auto;padding:8px 14px;border-top:1px solid var(--line)}
+.as-sug .chip{cursor:pointer;flex:none}
+.as-form{display:flex;gap:8px;padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
+.as-form input{flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);font:15px var(--f-body)}
+@media (max-width:900px){.aspanel{inset:0;width:auto;border-radius:0;top:0;bottom:0;right:0;left:0}.asbar .btn{display:none}}
 .reply{margin-top:8px;padding:8px 12px;border-radius:10px;border-left:3px solid var(--accent);background:var(--panel2);font-size:13.5px}
 svg text{font-family:var(--f-mono)}
 .legend{display:flex;gap:16px;font-size:12px;color:var(--muted);flex-wrap:wrap}
@@ -426,8 +442,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='1.9';
+const APP_VERSION='2.0';
 const CHANGELOG=[
+ ['2.0','11/10/2026',['Assistente "Pergunte qualquer coisa": leva até a tela certa e abre o formulário, responde com os seus números (saldo, gastos, parcelas, dízimo, vencimentos, metas) e pesquisa na internet.']],
  ['1.9','11/10/2026',['Categorias editáveis: criar, renomear, apagar e mudar explicação e % de todas as categorias de gastos e entradas (botão ⚙️ Categorias em Orçamento, Fixas e Lançamentos).']],
  ['1.8','11/10/2026',['Correção: a tela do Desenvolvedor agora reconhece a confirmação de e-mail na hora e mostra todos os usuários cadastrados.']],
  ['1.7','11/10/2026',['Desenvolvedor: lista de usuários mostra todos (inclusive você), com ativos, online agora, e-mail e último acesso.']],
@@ -611,7 +628,7 @@ function render(){
  buildNav();
  const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
  const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
- main.innerHTML=acct+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
+ main.innerHTML=acct+asBar()+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
 }
 function top(eyebrow,title,right){return '<header class="top"><div><div class="eyebrow">'+eyebrow+'</div><h1>'+title+'</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap">'+(right||'')+'</div></header>'}
@@ -878,6 +895,115 @@ async function admUser(u,s){
   toast(s==='ok'?'Usuário reativado':s==='paused'?'Usuário pausado':'Usuário excluído');render();
  }catch(e){toast('Não consegui salvar. Tente de novo.')}
 }
+
+/* ---------- Assistente "Pergunte qualquer coisa" (roda no próprio app, sem IA paga) ---------- */
+let AS_OPEN=false, AS_MSGS=[];
+function norm(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9% ]+/g,' ').replace(/\s+/g,' ').trim()}
+function goView(v,after){view=v;closeSheetQuiet();render();window.scrollTo(0,0);if(after)setTimeout(after,60)}
+const AS_ACTIONS={
+ gasto:()=>goView('lanc',()=>formTx()),
+ entrada:()=>goView('lanc',()=>formTx({type:'in',desc:'',cat:CAT_IN[0]||'Salário',val:'',date:todayISO(),pay:'Pix'})),
+ fixa:()=>goView('fixas',()=>formRec()),
+ cartao:()=>goView('pagar',()=>formCard()),
+ parcela:()=>goView('parc',()=>formInst()),
+ meta:()=>goView('metas',()=>formGoal()),
+ saldoIni:()=>goView('fixas',()=>formInit()),
+ oferta:()=>{dizTab='calc';goView('diz',()=>formOffer())},
+ estudo:()=>{dizTab='estudo';goView('diz')},
+ dizimo:()=>{dizTab='calc';goView('diz')},
+ cats:()=>goView('cats'),
+ share:()=>{asClose();showShare()},
+ news:()=>{asClose();showNews()},
+ termo:()=>{asClose();showTermo()},
+ tema:()=>{setTheme(getTheme()==='dark'?'light':'dark');render()},
+ manual:()=>{location.href='manual.html'}
+};
+// [palavras-chave, resposta, botões [rótulo, ação|view]]
+const AS_KB=[
+ [['lancar gasto','gastei','gasto','despesa','comprei','compra','paguei','anotar gasto','registrar gasto'],'Gastos do dia a dia ficam em <b>Lançamentos</b>. Já abri o formulário: escolha <b>Gasto</b>, descrição, valor e categoria. Se foi no cartão de crédito, escolha o cartão e o valor vai para a fatura certa.',[['Novo gasto','gasto']]],
+ [['recebi','entrada','receita','ganhei','renda extra','lancar entrada','pix recebido'],'Entradas avulsas ficam em <b>Lançamentos</b>. Abri o formulário já como <b>Entrada</b>.',[['Nova entrada','entrada']]],
+ [['salario','conta fixa','fixa','fixas','recorrente','aluguel','luz','agua','energia','internet','celular','todo mes','mensalidade','assinatura','renda da familia','esposa','marido'],'O que se repete todo mês fica em <b>Fixas</b>: salário, renda da família, aluguel, luz, internet… Abri o formulário de nova recorrente.',[['Nova recorrente','fixa'],['Ver Fixas','v:fixas']]],
+ [['cartao','fatura','fechamento','cartoes','nubank','credito'],'Cartões ficam em <b>A pagar</b>. Cadastre o nome, o dia que a fatura fecha e o dia de pagamento: o app monta cada fatura sozinho.',[['Cadastrar cartão','cartao'],['Ver A pagar','v:pagar']]],
+ [['pagar','a pagar','vencimento','vence','atrasad','boleto','contas do mes','para quem pagar'],'Em <b>A pagar</b> está tudo o que vence no mês, com para quem pagar, data e valor. Toque em <b>Paguei</b> quando pagar.',[['Abrir A pagar','v:pagar']]],
+ [['parcel','prestacao','financiamento','parcelado','parcelada','carne','em vezes','x de'],'Compras parceladas ficam em <b>Parcelados</b>: o app mostra a parcela, quanto falta e o mês em que você quita.',[['Nova compra parcelada','parcela'],['Ver Parcelados','v:parc']]],
+ [['orcamento','quanto posso gastar','limite','recomendado','extrapolei','passei do limite','estourou'],'O <b>Orçamento</b> mostra quanto é recomendado gastar em cada categoria e quanto você já gastou (verde, amarelo ou vermelho).',[['Abrir Orçamento','v:orc']]],
+ [['categoria','categorias','criar categoria','renomear categoria','editar categoria','apagar categoria'],'Em <b>⚙️ Categorias</b> você cria, renomeia, apaga e muda o % de cada categoria.',[['Abrir Categorias','cats']]],
+ [['por que devolver','estudo','biblia','biblico','licao','versiculo','malaquias'],'O estudo <b>Por que devolver o dízimo?</b> tem 9 lições com textos bíblicos, reflexão e pergunta para conversar.',[['Abrir o estudo','estudo']]],
+ [['oferta especial','missoes','construcao','campanha','oferta diferente','outra oferta'],'Para uma oferta diferente use <b>+ Oferta especial</b> na aba Dízimos. Dá para repetir todo mês.',[['Nova oferta especial','oferta']]],
+ [['dizimo','dizimos','oferta','ofertas','devolver','igreja'],'Em <b>Dízimos</b> o app calcula 10% de cada entrada e a oferta no % que você escolher. Toque em <b>Devolver</b> quando entregar.',[['Abrir Dízimos','dizimo']]],
+ [['meta','metas','juntar','guardar','economizar para','reserva','poupar','objetivo'],'Em <b>Metas</b> você vê em quanto tempo junta cada valor, usando a sobra do mês ou um valor fixo.',[['Nova meta','meta'],['Ver Metas','v:metas']]],
+ [['simular','simulador','vale a pena','comprar carro','comprar casa','financiar','posso comprar','cabe no bolso','cabe no orcamento'],'O <b>Simulador</b> diz se uma compra cabe no seu orçamento, quanto você paga de juros e em quanto tempo juntaria para pagar à vista.',[['Abrir Simulador','v:sim']]],
+ [['dica','dicas','economizar','divida','dividas','gastar menos','organizar dinheiro'],'Em <b>Dicas</b> tem orientações sobre gestão do dinheiro, carro, casa, roupas e dívidas, com um diagnóstico dos seus números.',[['Abrir Dicas','v:dicas']]],
+ [['saldo inicial','quanto tenho no banco','dinheiro na conta','comecar saldo'],'Informe o <b>saldo inicial</b> (quanto você tem hoje nas contas) e o app passa a mostrar seu saldo real.',[['Informar saldo inicial','saldoIni']]],
+ [['sugestao','sugerir','ideia','problema','bug','erro no app','reclamar','desenvolvedor falar'],'Mande em <b>Sugestões</b>: vai direto para o desenvolvedor e você acompanha a resposta.',[['Abrir Sugestões','v:dev']]],
+ [['instalar','compartilhar','link do app','mandar o app','baixar','tela inicial'],'Em <b>Compartilhar / Instalar</b> tem o link do app e o passo a passo para instalar no celular ou computador.',[['Abrir','share']]],
+ [['tema','escuro','claro','modo noturno','cor do app'],'Troquei o tema para você. Use o botão ☀️/🌙 no topo para trocar de novo.',[['Trocar tema','tema']]],
+ [['novidade','novidades','versao','atualizar','atualizacao','o que mudou'],'Em <b>Novidades</b> você vê o que mudou em cada versão. Quando sair versão nova aparece o botão 🔄 Atualizar.',[['Ver novidades','news']]],
+ [['manual','como usar','ajuda','tutorial','passo a passo','aprender'],'O manual tem o passo a passo de cada tela, com fotos.',[['Abrir manual','manual']]],
+ [['termo','termo de ciencia'],'Aqui está o termo de ciência.',[['Ver termo','termo']]],
+ [['senha','esqueci','trocar senha'],'Para trocar a senha: toque em <b>Sair</b>, depois em <b>Esqueci minha senha</b> e siga o link que chega no seu e-mail.',[]],
+ [['exemplo','exemplos','comecar do zero','apagar tudo','limpar dados'],'Os dados de exemplo saem pelo botão <b>Apagar exemplos e começar</b>, no aviso amarelo do topo (só aparece enquanto há exemplos).',[]],
+ [['painel','inicio','resumo','visao geral'],'O <b>Painel</b> mostra seu saldo, o que entrou e saiu, a previsão de 12 meses e o que falta pagar.',[['Abrir Painel','v:painel']]],
+ [['usuarios','pausar usuario','excluir usuario','quem usa'],'A lista de usuários fica na aba <b>Desenvolvedor</b> (só para o desenvolvedor).',[['Abrir Desenvolvedor','v:admin']]]
+];
+function asData(q){
+ const has=(...w)=>w.some(x=>q.includes(x));
+ const asks=has('quanto','quando','qual ','quais','tenho','sobra','sobrou','proximo','o que vence');
+ if(!asks)return null;
+ const x=month(CUR);
+ if(has('saldo','tenho na conta','quanto tenho')){const b=balanceAt(CUR);return b==null?['Ainda não sei seu saldo: informe o <b>saldo inicial</b>. Pelo que está lançado, o resultado de '+mLabel(CUR,true)+' é <b>'+R(x.saldo)+'</b>.',[['Informar saldo inicial','saldoIni']]]:['Seu saldo em conta agora é <b>'+R(b)+'</b>. Neste mês entrou '+R(x.entradas)+' e saiu '+R(x.saidas)+'.',[['Abrir Painel','v:painel']]]}
+ if(has('gastei','gasto do mes','gastos do mes','gastando','saiu','despesas')){const c=Object.entries(spentByCat(CUR)).sort((a,b)=>b[1]-a[1])[0];return ['Em '+mLabel(CUR,true)+' saíram <b>'+R(x.saidas)+'</b> (fixas '+R(x.outFix)+', parcelas '+R(x.parc)+', dia a dia '+R(x.outVar)+').'+(c?' O maior gasto foi <b>'+esc(c[0])+'</b>: '+R(c[1])+'.':''),[['Ver Orçamento','v:orc']]]}
+ if(has('maior gasto','onde mais gasto','mais gastei')){const c=Object.entries(spentByCat(CUR)).sort((a,b)=>b[1]-a[1]).slice(0,3);return [c.length?'Seus maiores gastos este mês: '+c.map(([k,v])=>'<b>'+esc(k)+'</b> '+R0(v)).join(', ')+'.':'Ainda não há gastos neste mês.',[['Ver Orçamento','v:orc']]]}
+ if(has('sobra','sobrar','sobrou','sobrando')){const s=projSobra(addM(CUR,1));return [s>=0?'A previsão é sobrar <b>'+R(s)+'</b> no mês que vem.':'A previsão é <b>faltar '+R(-s)+'</b> no mês que vem. Veja o Orçamento para cortar gastos.',[['Abrir Painel','v:painel']]]}
+ if(has('quito','quitar','livre das parcelas','livre de parcelas','acaba as parcelas','terminar as parcelas','parcelas')){const d=debtFree();return [d?'Você fica <b>livre das parcelas em '+mLabel(d,true)+'</b>. Neste mês as parcelas somam '+R(x.parc)+'.':'Você não tem parcelas ativas.',[['Ver Parcelados','v:parc']]]}
+ if(has('dizimo','oferta')){const c=titheCalc(CUR);return ['Em '+mLabel(CUR,true)+': dízimo <b>'+R(c.d)+'</b> e ofertas <b>'+R(c.o)+'</b>, total '+R(c.total)+'. Já devolvido: '+R(c.paidVal)+'.',[['Abrir Dízimos','dizimo']]]}
+ if(has('vence','vencimento','proximo pagamento','o que pagar','falta pagar')){const l=bills(CUR).filter(b=>!b.paid);const n=l.find(b=>b.day>=TODAY.getDate())||l[0];return [n?'Próximo pagamento: <b>'+esc(n.name)+'</b>'+(n.to&&n.to!==n.name?' (para '+esc(n.to)+')':'')+', dia '+String(n.day).padStart(2,'0')+', <b>'+R(n.val)+'</b>. Faltam '+l.length+' pagamento'+(l.length===1?'':'s')+' no mês.':'Tudo pago neste mês. 🎉',[['Abrir A pagar','v:pagar']]]}
+ if(has('meta','juntar')){const g=S.goals[0];if(!g)return ['Você ainda não tem metas.',[['Nova meta','meta']]];const m=goalMonths(g);return ['Meta <b>'+esc(g.name)+'</b>: '+(m==null?'com a sobra atual não dá para juntar.':m===0?'já atingida!':'chega em '+dur(m)+' ('+mLabel(addM(CUR,m),true)+').'),[['Ver Metas','v:metas']]]}
+ if(has('renda','ganho','salario','entrou')){return ['Neste mês entraram <b>'+R(x.entradas)+'</b> (fixas '+R(x.inFix)+', avulsas '+R(x.inVar)+').',[['Ver Fixas','v:fixas']]]}
+ return null;
+}
+function asAnswer(raw){
+ const q=' '+norm(raw)+' ';
+ const web=/^ ?(pesquis|procur|busca|google|na internet|o que e |o que significa|como funciona|cotacao|taxa selic|quanto esta o|preco d)/.test(q)||q.includes(' na internet ');
+ if(!web){const d=asData(q);if(d)return d}
+ let best=null,score=0;
+ if(!web)AS_KB.forEach(k=>{let s=0;k[0].forEach(w=>{if(q.includes(' '+w)||q.includes(w+' ')||q.includes(w))s+=w.length>5?2:1});if(s>score){score=s;best=k}});
+ if(best&&score>0){if(best[0][0]==='usuarios'&&!ME.owner)best=AS_KB.find(k=>k[0][0]==='manual');return [best[1],best[2],true]}
+ const term=raw.replace(/^(pesquis(e|ar|a)|procur(e|ar|a)|busc(a|ar|que)|google)\s*(na internet|no google)?\s*(sobre|por)?\s*/i,'').trim()||raw;
+ return [web?'Abri a pesquisa no Google numa nova aba. Se não abriu, toque no botão:':'Não encontrei isso no app, então abri uma pesquisa no Google numa nova aba. Se não abriu, toque no botão:',[['🔎 Pesquisar "'+term.slice(0,40)+'"','web:'+term]],false,true];
+}
+function asRun(a){
+ if(!a)return;
+ if(a.startsWith('v:')){const v=a.slice(2);if(v==='admin'&&!ME.owner)return;goView(v);return}
+ if(a.startsWith('web:')){window.open('https://www.google.com/search?q='+encodeURIComponent(a.slice(4)),'_blank','noopener');return}
+ if(AS_ACTIONS[a])AS_ACTIONS[a]();
+}
+function asAsk(text){
+ text=String(text||'').trim();if(!text)return;
+ const r=asAnswer(text);
+ AS_MSGS.push({me:true,t:esc(text)});AS_MSGS.push({me:false,t:r[0],btns:r[1]||[]});
+ AS_MSGS=AS_MSGS.slice(-30);
+ // ações diretas: abre a tela e o formulário na hora
+ const first=(r[1]||[])[0];
+ if(r[3]){window.open('https://www.google.com/search?q='+encodeURIComponent(first[1].slice(4)),'_blank','noopener')}
+ else if(r[2]&&first){AS_OPEN=window.innerWidth>900;asRun(first[1]);if(window.innerWidth>900)asPaint();return}
+ asPaint();
+}
+function asClose(){AS_OPEN=false;asPaint()}
+function asPaint(){
+ let el=document.getElementById('asPanel');
+ if(!AS_OPEN){if(el)el.remove();return}
+ if(!el){el=document.createElement('div');el.id='asPanel';el.className='aspanel';el.setAttribute('role','dialog');el.setAttribute('aria-label','Assistente');document.body.appendChild(el)}
+ const sug=['Onde lanço um gasto?','Quanto gastei este mês?','Quando quito minhas parcelas?','Qual meu dízimo este mês?','O que vence agora?','Como cadastro meu cartão?','Pesquisar taxa Selic hoje'];
+ el.innerHTML='<div class="as-hd"><div><b>✨ Assistente</b><div class="muted" style="font-size:12px">Pergunte qualquer coisa sobre o app ou o seu dinheiro</div></div><button class="btn sm ghost" data-act="asClose" aria-label="Fechar">✕</button></div>'+
+  '<div class="as-body" id="asBody">'+(AS_MSGS.length?AS_MSGS.map(m=>'<div class="as-msg '+(m.me?'me':'bot')+'">'+m.t+((m.btns||[]).length?'<div class="as-btns">'+m.btns.map(b=>'<button class="btn sm '+(b[1].startsWith('web:')?'':'primary')+'" data-as-run="'+esc(b[1])+'">'+esc(b[0])+'</button>').join('')+'</div>':'')+'</div>').join(''):
+   '<div class="as-msg bot">Olá'+(ME.name?', '+esc(ME.name.split(' ')[0]):'')+'! Posso te levar até a tela certa, responder com os seus números ou pesquisar na internet. Experimente:</div>')+
+  '</div><div class="as-sug">'+sug.map(s=>'<button class="chip" data-as-ask="'+esc(s)+'">'+esc(s)+'</button>').join('')+'</div>'+
+  '<form class="as-form" id="asForm"><input id="asIn" autocomplete="off" placeholder="Pergunte qualquer coisa…" aria-label="Pergunte qualquer coisa"><button class="btn primary" type="submit">Enviar</button></form>';
+ const b=document.getElementById('asBody');if(b)b.scrollTop=b.scrollHeight;
+ const i=document.getElementById('asIn');if(i&&window.innerWidth>900)i.focus();
+}
+function asBar(){return '<form class="asbar" id="asBarForm" role="search"><span aria-hidden="true">✨</span><input id="asBarIn" autocomplete="off" placeholder="Pergunte qualquer coisa… ex.: onde lanço um gasto?" aria-label="Pergunte qualquer coisa"><button class="btn sm primary" type="submit">Perguntar</button></form>'}
 
 /* Categorias */
 function catUse(name,type){
@@ -1407,6 +1533,9 @@ function find(col,id){return S[col].find(x=>x.id===id)}
 /* ---------- eventos ---------- */
 let delArm=null;
 document.addEventListener('click',e=>{
+ const ar=e.target.closest('[data-as-run]');if(ar){asRun(ar.dataset.asRun);if(window.innerWidth<=900)asClose();return}
+ const aa=e.target.closest('[data-as-ask]');if(aa){AS_OPEN=true;asAsk(aa.dataset.asAsk);return}
+ if(e.target.closest('[data-act=asClose]')){asClose();return}
  const go=e.target.closest('[data-go]');if(go){view=go.dataset.go;render();window.scrollTo(0,0);return}
  const tp=e.target.closest('[data-tip]');if(tp){tipTab=tp.dataset.tip;render();return}
  const b=e.target.closest('[data-act]');if(!b)return;
@@ -1489,6 +1618,7 @@ document.addEventListener('change',e=>{
  S.budget=S.budget||{};{const v=Math.max(0,Math.min(100,num(e.target.value))),d=catDef(c);if(d){d.pct=v;delete S.budget[c]}else S.budget[c]=v}S.demo=false;commit('Percentual de '+c+' atualizado');
 });
 document.addEventListener('submit',async e=>{
+ if(e.target.id==='asBarForm'||e.target.id==='asForm'){e.preventDefault();const i=e.target.querySelector('input');const t=i.value;i.value='';AS_OPEN=true;asAsk(t);return}
  if(e.target.id==='authForm'){e.preventDefault();if(!authBusy)doAuth();return}
  if(e.target.id==='localForm'){e.preventDefault();locked=false;render();return}
  if(e.target.id==='termsForm'){e.preventDefault();const c=document.getElementById('termsChk');if(!c||!c.checked){toast('Marque "Li e estou ciente" para continuar');return}S.termsAt=todayISO();commit();return}
