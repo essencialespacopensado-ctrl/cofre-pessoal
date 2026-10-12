@@ -926,7 +926,7 @@ function vLogin(){
  const foot='<p class="muted" style="font-size:12.5px;margin:16px 0 0">Seus dados são privados.</p>';
  if(!ready)return '<div class="login"><div class="card hero lbox">'+brand+'<h1 style="font-size:24px">Carregando…</h1>'+foot+'</div></div>';
  if(LOCAL_ONLY)return '<div class="login"><div class="card hero lbox">'+brand+'<div class="eyebrow">Acesso</div><h1 style="font-size:28px;margin-bottom:14px">Entrar</h1><div class="who"><div><div style="font-weight:700">Modo local</div><div class="muted" style="font-size:12.5px">Os dados ficam só neste aparelho.</div></div></div><form id="localForm" class="form" style="grid-template-columns:1fr"><button class="btn primary" type="submit" style="justify-content:center;padding:12px">Entrar</button></form>'+foot+'</div></div>';
- const m=authMode,busy=authBusy?' disabled':'';
+ const m=authMode,busy='';
  const inp=(id,label,type,ac,extra)=>'<label class="f">'+label+'<input id="'+id+'" type="'+type+'" autocomplete="'+ac+'"'+(extra||'')+'></label>';
  let body;
  if(m==='signup')body='<div class="eyebrow">Novo por aqui</div><h1 style="font-size:28px;margin-bottom:14px">Criar conta</h1>'+
@@ -953,30 +953,39 @@ function vTermsGate(){
 function setAuthErr(t){const el=document.getElementById('authErr');if(el){el.textContent=t||'';el.className='autherr'+(t&&/enviad|criad/i.test(t)?' ok':'')}}
 async function doAuth(){
  const v=id=>{const el=document.getElementById(id);return el?el.value.trim():''};
- const email=v('aEmail'),pass=(document.getElementById('aPass')||{}).value||'';
- authBusy=true;render();
+ const email=v('aEmail'),name=v('aName'),pass=(document.getElementById('aPass')||{}).value||'',p2=(document.getElementById('aPass2')||{}).value||'';
+ const btn=document.querySelector('#authForm button[type=submit]');
+ const label=btn?btn.textContent:'';
+ const setBusy=on=>{authBusy=on;if(btn){btn.disabled=on;btn.textContent=on?(authMode==='signup'?'Criando…':authMode==='reset'?'Enviando…':'Entrando…'):label}};
+ setAuthErr('');
  try{
   if(authMode==='signup'){
-   const name=v('aName'),p2=(document.getElementById('aPass2')||{}).value||'';
    if(!name)throw{msg:'Escreva seu nome.'};
+   if(!email)throw{msg:'Escreva seu e-mail.'};
+   if(pass.length<6)throw{msg:'A senha precisa ter pelo menos 6 caracteres.'};
    if(pass!==p2)throw{msg:'As duas senhas estão diferentes.'};
    if(!termsChecked)throw{msg:'Marque "Li e estou ciente do termo de ciência" para criar a conta.'};
+   setBusy(true);
    pendingTerms=true;pendingName=name;
    const cred=await AUTH.createUserWithEmailAndPassword(email,pass);
    try{await cred.user.updateProfile({displayName:name})}catch(e){}
    try{await cred.user.sendEmailVerification()}catch(e){}
    ME.name=name;
   }else if(authMode==='reset'){
+   if(!email)throw{msg:'Escreva o e-mail da sua conta.'};
+   setBusy(true);
    await AUTH.sendPasswordResetEmail(email);
-   authBusy=false;authMode='login';render();setAuthErr('Link enviado para '+email+'. Confira também a caixa de spam.');return;
+   setBusy(false);authMode='login';render();
+   const el=document.getElementById('aEmail');if(el)el.value=email;
+   setAuthErr('Link enviado para '+email+'. Confira também a caixa de spam.');return;
   }else{
+   if(!email||!pass)throw{msg:'Preencha e-mail e senha.'};
+   setBusy(true);
    await AUTH.signInWithEmailAndPassword(email,pass);
   }
   authBusy=false;
  }catch(e){
-  authBusy=false;pendingTerms=false;pendingName='';
-  const keep={};['aName','aEmail'].forEach(id=>{const el=document.getElementById(id);if(el)keep[id]=el.value});
-  render();for(const k in keep){const el=document.getElementById(k);if(el)el.value=keep[k]}
+  setBusy(false);pendingTerms=false;pendingName='';
   setAuthErr(e&&e.msg?e.msg:authErr(e));
  }
 }
