@@ -392,8 +392,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='1.3';
+const APP_VERSION='1.4';
 const CHANGELOG=[
+ ['1.4','11/10/2026',['Dízimos: "Ofertas especiais" para adicionar ofertas diferentes (missões, construção, campanhas), só no mês ou todo mês.']],
  ['1.3','11/10/2026',['Modo escuro como padrão, com botão para trocar entre Claro e Escuro.','E-mail de confirmação enviado só para a conta do desenvolvedor.','Botão de atualização e esta janela de Novidades.']],
  ['1.2','11/10/2026',['Correção: ao criar conta, os dados digitados não somem mais quando aparece um erro.']],
  ['1.1','11/10/2026',['App em site próprio: abre para qualquer pessoa, sem conta no Claude.','Login com e-mail e senha, e "Esqueci minha senha".','Dados salvos na nuvem, separados por usuário.','Instalar como aplicativo no celular e no computador.','Estudo "Por que devolver o dízimo?" dentro da aba Dízimos.']],
@@ -837,12 +838,16 @@ function titheRows(m){
   return {...s,inc:!o.off,d:o.d!=null?num(o.d):dAuto,o:o.o!=null?num(o.o):oAuto,edited:o.d!=null||o.o!=null,paid:pr[s.key]||null};
  });
 }
+function offersFor(m){
+ const T=tithe();T.extra=T.extra||[];
+ return T.extra.filter(x=>x.month===m||(x.rec&&diffM(x.month,m)>=0&&(!x.end||diffM(m,x.end)>=0))).map(x=>({...x,paid:(x.paid||{})[m]||null}));
+}
 function titheCalc(m){
- const rows=titheRows(m),inc=rows.filter(r=>r.inc);
- const d=inc.reduce((a,r)=>a+r.d,0),o=inc.reduce((a,r)=>a+r.o,0);
- const paid=inc.filter(r=>r.paid).reduce((a,r)=>a+r.paid.d+r.paid.o,0);
+ const rows=titheRows(m),inc=rows.filter(r=>r.inc),ex=offersFor(m);
+ const d=inc.reduce((a,r)=>a+r.d,0),oP=inc.reduce((a,r)=>a+r.o,0),oX=ex.reduce((a,x)=>a+num(x.val),0);
+ const paid=inc.filter(r=>r.paid).reduce((a,r)=>a+r.paid.d+r.paid.o,0)+ex.filter(x=>x.paid).reduce((a,x)=>a+num(x.paid.val),0);
  const base=inc.reduce((a,r)=>a+r.val,0);
- return {rows,base,d,o,total:d+o,paidVal:paid,pend:inc.filter(r=>!r.paid).length,nInc:inc.length};
+ return {rows,ex,base,d,o:oP+oX,oP,oX,total:d+oP+oX,paidVal:paid,pend:inc.filter(r=>!r.paid).length+ex.filter(x=>!x.paid).length,nInc:inc.length+ex.length};
 }
 let dizTab='calc';
 function dizTabs(){return '<div class="tabs" role="tablist" style="margin-bottom:16px"><button class="tab" role="tab" data-act="dizTab" data-v="calc" aria-selected="'+(dizTab==='calc')+'">Meus dízimos e ofertas</button><button class="tab" role="tab" data-act="dizTab" data-v="estudo" aria-selected="'+(dizTab==='estudo')+'">Por que devolver o dízimo?</button></div>'}
@@ -860,7 +865,7 @@ function vDiz(){
    '<div class="dzact">'+(!r.inc?'<span class="chip">Fora</span>':r.paid?'<span class="chip good">Devolvido '+r.paid.date.slice(8,10)+'/'+r.paid.date.slice(5,7)+'</span><button class="btn sm ghost" data-act="dzUndo" data-k="'+k+'">Desfazer</button>':'<button class="btn sm primary" data-act="dzPay" data-k="'+k+'">Devolver '+R0(r.d+r.o)+'</button>')+'</div></div>'};
  return top('Dízimos e ofertas · '+mLabel(m,true),'Fidelidade em cada entrada','<div class="monthnav"><button class="btn sm ghost" data-act="dPrev" aria-label="Mês anterior">‹</button><span class="mono" style="min-width:64px;text-align:center">'+mLabel(m)+'</span><button class="btn sm ghost" data-act="dNext" aria-label="Próximo mês">›</button></div>')+
  dizTabs()+'<div class="grid g32"><section class="card hero"><div class="kpi"><div class="lb">Total do mês</div></div><div class="big">'+R(c.total)+'</div>'+
-  '<div class="out-box" style="margin-top:16px"><div class="kpi"><div class="lb">Dízimos</div><div class="vl">'+R(c.d)+'</div><div class="sub">sobre '+R0(c.base)+' em '+c.nInc+' entrada'+(c.nInc===1?'':'s')+'</div></div><div class="kpi"><div class="lb">Ofertas</div><div class="vl" style="color:var(--accent)">'+R(c.o)+'</div><div class="sub">'+String(T.offer).replace('.',',')+'% padrão em cada entrada</div></div></div>'+
+  '<div class="out-box" style="margin-top:16px"><div class="kpi"><div class="lb">Dízimos</div><div class="vl">'+R(c.d)+'</div><div class="sub">sobre '+R0(c.base)+' em '+c.nInc+' entrada'+(c.nInc===1?'':'s')+'</div></div><div class="kpi"><div class="lb">Ofertas</div><div class="vl" style="color:var(--accent)">'+R(c.o)+'</div><div class="sub">'+String(T.offer).replace('.',',')+'% nas entradas'+(c.oX?' + '+R0(c.oX)+' em ofertas especiais':'')+'</div></div></div>'+
   '<div style="margin-top:14px"><div class="bar"><i style="width:'+(c.total?Math.min(100,c.paidVal/c.total*100):0)+'%"></i></div><div class="bnums"><span class="mono">'+R0(c.paidVal)+' devolvido</span><span class="'+(c.pend?'wrn':'pos')+'">'+(c.pend?c.pend+' entrada'+(c.pend>1?'s':'')+' pendente'+(c.pend>1?'s':''):'Tudo devolvido')+'</span></div></div>'+
   (c.pend?'<div style="margin-top:14px"><button class="btn primary" data-act="dzPayAll">Marcar todas como devolvidas</button></div>':'')+'</section>'+
  '<section class="card"><div class="hd"><h2>Oferta padrão</h2></div>'+
@@ -870,6 +875,11 @@ function vDiz(){
   '<div style="margin-top:12px"><button class="btn sm" data-act="dizTab" data-v="estudo">'+icon('estudo')+'Por que devolver o dízimo?</button></div></section></div>'+
  '<section class="card" style="margin-top:16px"><div class="hd"><h2>Por entrada</h2><span class="muted" style="font-size:12.5px">cada entrada tem seu dízimo e sua oferta</span></div>'+
   (c.rows.length?c.rows.map(row).join(''):'<div class="empty">Nenhuma entrada em '+mLabel(m,true)+'. Cadastre em Fixas ou Lançamentos.</div>')+'</section>'+
+ '<section class="card" style="margin-top:16px"><div class="hd"><h2>Ofertas especiais</h2><button class="btn sm primary" data-act="addOffer">+ Oferta especial</button></div><div class="list">'+
+  (c.ex.length?c.ex.map(x=>'<div class="row"><div class="ic" style="color:var(--accent)">'+icon('diz')+'</div><div style="min-width:0"><div class="t">'+esc(x.name)+'</div><div class="s">'+(x.rec?'Todo mês, desde '+mLabel(x.month):'Só em '+mLabel(x.month))+(x.note?' · '+esc(x.note):'')+'</div></div><div class="v">'+R(x.val)+'</div><div class="del" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">'+
+   (x.paid?'<span class="chip good">Devolvido '+x.paid.date.slice(8,10)+'/'+x.paid.date.slice(5,7)+'</span><button class="btn sm ghost" data-act="undoOffer" data-id="'+x.id+'">Desfazer</button>':'<button class="btn sm primary" data-act="payOffer" data-id="'+x.id+'">Devolver</button>')+
+   '<button class="btn sm ghost" data-act="editOffer" data-id="'+x.id+'">Editar</button><button class="btn sm ghost danger" data-act="delOffer" data-id="'+x.id+'">Excluir</button></div></div>').join('')
+  :'<div class="empty">Nenhuma oferta especial em '+mLabel(m,true)+'. Use para missões, construção, campanhas, ajuda a alguém…</div>')+'</div></section>'+
  '<section class="card" style="margin-top:16px"><div class="hd"><h2>Últimos meses</h2></div><div class="list">'+
   (hist.length?hist.map(h=>{const all=h.pend===0;const part=!all&&h.paidVal>0;return '<div class="row" style="grid-template-columns:auto minmax(0,1fr) auto"><div class="ic '+(all?'in':'out')+'">'+mLabel(h.m).slice(0,3)+'</div><div style="min-width:0"><div class="t">'+R(h.total)+'</div><div class="s">dízimos '+R0(h.d)+' · ofertas '+R0(h.o)+' · devolvido '+R0(h.paidVal)+'</div></div><span class="chip '+(all?'good':part?'acc':(h.m===CUR?'acc':'warn'))+'">'+(all?'Devolvido':part?'Parcial':h.m===CUR?'Em aberto':'Pendente')+'</span></div>'}).join(''):'<div class="empty">Sem histórico ainda.</div>')+'</div></section>';
 }
@@ -881,6 +891,27 @@ function dzPayRow(m,r){
  T.pr[m][r.key]={d:r.d,o:r.o,date,tx:ids};
 }
 function dzSetOv(m,k,patch){const T=tithe();T.rows[m]=T.rows[m]||{};const o=Object.assign({},T.rows[m][k]||{},patch);for(const f in o)if(o[f]===undefined)delete o[f];if(Object.keys(o).length)T.rows[m][k]=o;else delete T.rows[m][k];S.demo=false}
+
+function payOffer(m,id){
+ const T=tithe(),x=(T.extra||[]).find(o=>o.id===id);if(!x)return;
+ const date=m===CUR?todayISO():m+'-'+String(Math.min(28,TODAY.getDate())).padStart(2,'0');
+ const tid=uid();S.tx.push({id:tid,type:'out',desc:'Oferta · '+x.name+' ('+mLabel(m)+')',cat:'Doações',val:Math.round(num(x.val)*100)/100,date,pay:'Pix'});
+ x.paid=x.paid||{};x.paid[m]={val:num(x.val),date,tx:[tid]};S.demo=false;
+}
+function formOffer(x){
+ x=x||{name:'',val:'',month:dizMonth,rec:false,note:''};
+ openSheet(x.id?'Editar oferta especial':'Nova oferta especial','<div class="form">'+
+  '<label class="f full">Para quê<input name="name" value="'+esc(x.name)+'" placeholder="Ex.: Missões, Construção, Campanha do agasalho"></label>'+
+  '<label class="f">Valor (R$)<input name="val" type="number" inputmode="decimal" min="0" step="0.01" value="'+(x.val||'')+'"></label>'+
+  '<label class="f">Mês<input name="month" type="month" value="'+x.month+'"></label>'+
+  '<label class="f full chk" style="text-transform:none;letter-spacing:0;font-family:var(--f-body);font-size:14px;color:var(--fg)"><input type="checkbox" name="rec"'+(x.rec?' checked':'')+'> Repetir todo mês a partir deste mês</label>'+
+  '<label class="f full">Observação (opcional)<input name="note" value="'+esc(x.note||'')+'" placeholder="Ex.: entregar no envelope azul"></label></div>',f=>{
+  if(!need(f,['name','val']))return false;
+  const T=tithe();T.extra=T.extra||[];
+  const o={id:x.id||uid(),name:f.name.value.trim(),val:num(f.val.value),month:f.month.value||dizMonth,rec:f.rec.checked,note:f.note.value.trim(),paid:x.paid||{}};
+  const k=T.extra.findIndex(e=>e.id===o.id);if(k>=0)T.extra[k]=o;else T.extra.push(o);
+  S.demo=false;commit(x.id?'Oferta atualizada':'Oferta especial adicionada');});
+}
 
 /* Estudo bíblico */
 const ESTUDO=[
@@ -1299,8 +1330,13 @@ document.addEventListener('click',e=>{
  else if(a==='dNext'){dizMonth=addM(dizMonth,1);render()}
  else if(a==='dizOffer'){tithe().offer=num(b.dataset.v);S.demo=false;commit('Oferta: '+b.dataset.v+'%')}
  else if(a==='dzPay'){const r=titheRows(dizMonth).find(x=>x.key===b.dataset.k);if(r){dzPayRow(dizMonth,r);S.demo=false;commit('Devolvido: '+R(r.d+r.o)+' ('+r.desc+')')}}
- else if(a==='dzPayAll'){const rs=titheRows(dizMonth).filter(x=>x.inc&&!x.paid);rs.forEach(r=>dzPayRow(dizMonth,r));S.demo=false;commit(rs.length+' entrada'+(rs.length>1?'s':'')+' marcada'+(rs.length>1?'s':'')+' como devolvida'+(rs.length>1?'s':''))}
+ else if(a==='dzPayAll'){const rs=titheRows(dizMonth).filter(x=>x.inc&&!x.paid);rs.forEach(r=>dzPayRow(dizMonth,r));offersFor(dizMonth).filter(x=>!x.paid).forEach(x=>{payOffer(dizMonth,x.id);rs.push(x)});S.demo=false;commit(rs.length+' entrada'+(rs.length>1?'s':'')+' marcada'+(rs.length>1?'s':'')+' como devolvida'+(rs.length>1?'s':''))}
  else if(a==='dzUndo'){const T=tithe(),p=(T.pr[dizMonth]||{})[b.dataset.k];if(p){S.tx=S.tx.filter(t=>!(p.tx||[]).includes(t.id));delete T.pr[dizMonth][b.dataset.k];commit('Registro desfeito')}}
+ else if(a==='addOffer')formOffer();
+ else if(a==='editOffer'){const x=(tithe().extra||[]).find(o=>o.id===id);if(x)formOffer({...x})}
+ else if(a==='payOffer'){payOffer(dizMonth,id);commit('Oferta registrada em Doações')}
+ else if(a==='undoOffer'){const x=(tithe().extra||[]).find(o=>o.id===id),p=x&&x.paid&&x.paid[dizMonth];if(p){S.tx=S.tx.filter(t=>!(p.tx||[]).includes(t.id));delete x.paid[dizMonth];commit('Registro desfeito')}}
+ else if(a==='delOffer'){if(delArm!==b){delArm=b;b.textContent='Confirmar';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Excluir'}},3000);return}delArm=null;const T=tithe();T.extra=(T.extra||[]).filter(o=>o.id!==id);commit('Oferta excluída')}
  else if(a==='dzReset'){dzSetOv(dizMonth,b.dataset.k,{d:undefined,o:undefined});commit('Valores automáticos restaurados')}
  else if(a==='dizTab'){dizTab=b.dataset.v;render();window.scrollTo(0,0)}
  else if(a==='studyDone'){S.study=S.study||{};const i=b.dataset.i;if(S.study[i])delete S.study[i];else S.study[i]=todayISO();S.demo=false;commit(S.study[i]?'Lição marcada como estudada':'')}
