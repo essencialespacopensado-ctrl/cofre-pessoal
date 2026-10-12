@@ -273,6 +273,7 @@ svg text{font-family:var(--f-mono)}
 .backbtn{margin:0 0 8px -6px;padding:4px 10px;font-size:13px}
 .dupask{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:16px}.dupbox{background:var(--panel);border:1px solid var(--warn);border-radius:16px;padding:20px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)}.dupbtns{display:flex;flex-direction:column;gap:8px}.dupbtns .btn{justify-content:center;text-align:center;white-space:normal}
 @media(max-width:700px){.xrowe{grid-template-columns:48px minmax(0,1fr) auto!important}.xrowe>div:last-child{display:none}#main .hd select.projm,#main .hd input.projm{max-width:100%}}
+.micbtn{font-size:16px;padding:4px 10px}.micbtn.rec{background:var(--bad);color:#fff;animation:micp 1s infinite}@keyframes micp{50%{opacity:.55}}
 </style>
 </head>
 <body>
@@ -983,8 +984,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.26';
+const APP_VERSION='2.27';
 const CHANGELOG=[
+ ['2.27','12/10/2026',['Assistente por voz: toque no 🎤 e fale a pergunta. Opção 🔊 para ouvir as respostas em voz alta.']],
  ['2.26','12/10/2026',['Nova aba 📜 Extrato: tudo o que entrou, saiu e vai acontecer, com data, origem (de onde veio), situação e saldo linha a linha. Filtro por período, tipo e busca.','Dízimo mostra de onde veio e a conta (10% de quanto).','📝 Histórico do que você fez (cadastros, edições, exclusões, pagamentos).','Assistente responde "o que gastei com X" no mês, mês passado, últimos N meses ou no ano, e abre o Extrato filtrado.']],
  ['2.25','12/10/2026',['A data do saldo informado é o início do app: nada antes dela gera dízimo devido, conta atrasada ou "a receber".','Opção "neste mês já recebi e já paguei tudo": salário, contas fixas, parcelas e faturas do mês de início contam como resolvidos; só entram avulsos e combinados depois (ex.: entrada parcelada).']],
  ['2.24','12/10/2026',['Saldo em conta: agora você informa o saldo de HOJE (com a data). O que entrou/saiu até essa data não é somado de novo — evita contar o salário duas vezes.','Toque no saldo para ver cada entrada e saída que foi contada no mês, e quais entraram automaticamente porque o dia já passou.']],
@@ -1540,6 +1542,7 @@ const AS_ACTIONS={
 };
 // [palavras-chave, resposta, botões [rótulo, ação|view]]
 const AS_KB=[
+ [['voz','falar','microfone','por voz','audio'],'Toque no <b>🎤</b> ao lado da pergunta e fale. Para ouvir as respostas em voz alta, toque no <b>🔇/🔊</b> na janela do assistente.',[]],
  [['extrato','historico','registro','de onde veio','de onde vem','o que aconteceu','movimentacao','movimentacoes'],'O <b>📜 Extrato</b> mostra tudo o que entrou, saiu e vai acontecer, com a origem de cada valor (inclusive como o dízimo foi calculado) e o histórico do que você fez.',[['Abrir Extrato','v:ext']]],
  [['projecao','projetar','simular','simulacao','cenario','como vou estar','como estarei','vou ter em','quanto vou ter','fim do ano','daqui a'],'A <b>🔮 Projeção e simulação</b> fica no Painel, logo abaixo do Resumo geral: escolha mês e ano e mude o cenário (renda, gastos, compras) para comparar.',[['Abrir projeção','proj']]],
  [['13','decimo terceiro','13o','ferias','fgts','clt','carteira assinada','salario bruto','liquido','inss','imposto de renda','holerite'],'Na aba <b>Trabalho</b> o app calcula pela lei: salário líquido, 13º (1ª e 2ª parcela), férias + 1/3 e FGTS, e já coloca na previsão.',[['Abrir Trabalho','trab'],['Configurar CLT','clt']]],
@@ -1625,10 +1628,32 @@ function asRun(a){
  if(a.startsWith('web:')){window.open('https://www.google.com/search?q='+encodeURIComponent(a.slice(4)),'_blank','noopener');return}
  if(AS_ACTIONS[a])AS_ACTIONS[a]();
 }
+
+/* ===== Voz: perguntar falando e ouvir a resposta ===== */
+let SPEAK=false;try{SPEAK=localStorage.getItem('cofre-voz')==='1'}catch(e){}
+let REC=null,RECON=false;
+function micStart(btn){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){toast('Seu navegador não tem reconhecimento de voz. Use o Chrome (celular ou PC) ou o teclado do celular com microfone.');return}
+ if(RECON&&REC){try{REC.stop()}catch(e){}return}
+ REC=new SR();REC.lang='pt-BR';REC.interimResults=true;REC.maxAlternatives=1;REC.continuous=false;
+ const inp=document.getElementById('asIn')||document.getElementById('asBarIn');let final='';
+ document.querySelectorAll('.micbtn').forEach(b=>{b.classList.add('rec');b.textContent='⏺'});RECON=true;toast('Pode falar… 🎤');
+ REC.onresult=e=>{let t='';for(let i=0;i<e.results.length;i++){t+=e.results[i][0].transcript;if(e.results[i].isFinal)final=t}const tgt=document.getElementById('asIn')||document.getElementById('asBarIn');if(tgt)tgt.value=t};
+ REC.onerror=e=>{RECON=false;document.querySelectorAll('.micbtn').forEach(b=>{b.classList.remove('rec');b.textContent='🎤'});toast(e.error==='not-allowed'||e.error==='service-not-allowed'?'Permita o uso do microfone para este site (ícone de cadeado na barra de endereço).':e.error==='no-speech'?'Não ouvi nada. Toque no 🎤 e fale de novo.':'Não consegui ouvir. Tente de novo.')};
+ REC.onend=()=>{RECON=false;document.querySelectorAll('.micbtn').forEach(b=>{b.classList.remove('rec');b.textContent='🎤'});const tgt=document.getElementById('asIn')||document.getElementById('asBarIn');const t=(final||(tgt&&tgt.value)||'').trim();if(t){if(tgt)tgt.value='';AS_OPEN=true;asAsk(t)}};
+ try{REC.start()}catch(e){RECON=false;toast('Não consegui ligar o microfone.')}
+}
+function speakText(html){
+ if(!SPEAK||!window.speechSynthesis)return;
+ const d=document.createElement('div');d.innerHTML=String(html).replace(/<br\s*\/?>/g,'. ');let t=d.textContent.replace(/R\$\s?/g,'').replace(/(\d)\.(\d{3})/g,'$1$2').replace(/\s+/g,' ').trim();
+ t=t.replace(/(\d+),(\d{2})/g,(m,a,b)=>a+' reais'+(b==='00'?'':' e '+b+' centavos')).replace(/\.\./g,'.').replace(/\b(\d+)\b(?! reais)/g,'$1');
+ try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t.slice(0,600));u.lang='pt-BR';const v=speechSynthesis.getVoices().find(v=>/pt(-|_)BR/i.test(v.lang));if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}
+}
 function asAsk(text){
  text=String(text||'').trim();if(!text)return;
  const r=asAnswer(text);
- AS_MSGS.push({me:true,t:esc(text)});AS_MSGS.push({me:false,t:r[0],btns:r[1]||[]});
+ AS_MSGS.push({me:true,t:esc(text)});AS_MSGS.push({me:false,t:r[0],btns:r[1]||[]});speakText(r[0]);
  AS_MSGS=AS_MSGS.slice(-30);
  // ações diretas: abre a tela e o formulário na hora
  const first=(r[1]||[])[0];
@@ -1646,11 +1671,11 @@ function asPaint(){
   '<div class="as-body" id="asBody">'+(AS_MSGS.length?AS_MSGS.map(m=>'<div class="as-msg '+(m.me?'me':'bot')+'">'+m.t+((m.btns||[]).length?'<div class="as-btns">'+m.btns.map(b=>'<button class="btn sm '+(b[1].startsWith('web:')?'':'primary')+'" data-as-run="'+esc(b[1])+'">'+esc(b[0])+'</button>').join('')+'</div>':'')+'</div>').join(''):
    '<div class="as-msg bot">Olá'+(ME.name?', '+esc(ME.name.split(' ')[0]):'')+'! Posso te levar até a tela certa, responder com os seus números ou pesquisar na internet. Experimente:</div>')+
   '</div><div class="as-sug">'+sug.map(s=>'<button class="chip" data-as-ask="'+esc(s)+'">'+esc(s)+'</button>').join('')+'</div>'+
-  '<form class="as-form" id="asForm"><input id="asIn" autocomplete="off" placeholder="Pergunte qualquer coisa…" aria-label="Pergunte qualquer coisa"><button class="btn primary" type="submit">Enviar</button></form>';
+  '<form class="as-form" id="asForm"><input id="asIn" autocomplete="off" placeholder="Pergunte qualquer coisa… ou toque no 🎤" aria-label="Pergunte qualquer coisa"><button class="btn sm ghost micbtn" type="button" data-act="mic" title="Falar a pergunta" aria-label="Perguntar por voz">🎤</button><button class="btn sm ghost" type="button" data-act="speakTog" title="Ler respostas em voz alta" aria-pressed="'+SPEAK+'">'+(SPEAK?'🔊':'🔇')+'</button><button class="btn primary" type="submit">Enviar</button></form>';
  const b=document.getElementById('asBody');if(b)b.scrollTop=b.scrollHeight;
  const i=document.getElementById('asIn');if(i&&window.innerWidth>900)i.focus();
 }
-function asBar(){return '<form class="asbar" id="asBarForm" role="search"><span aria-hidden="true">✨</span><input id="asBarIn" autocomplete="off" placeholder="Pergunte qualquer coisa… ex.: onde lanço um gasto?" aria-label="Pergunte qualquer coisa"><button class="btn sm primary" type="submit">Perguntar</button></form>'}
+function asBar(){return '<form class="asbar" id="asBarForm" role="search"><span aria-hidden="true">✨</span><input id="asBarIn" autocomplete="off" placeholder="Pergunte qualquer coisa… ex.: onde lanço um gasto?" aria-label="Pergunte qualquer coisa"><button class="btn sm ghost micbtn" type="button" data-act="mic" title="Falar a pergunta" aria-label="Perguntar por voz">🎤</button><button class="btn sm primary" type="submit">Perguntar</button></form>'}
 
 /* Categorias */
 function catUse(name,type){
@@ -2497,6 +2522,8 @@ document.addEventListener('click',e=>{
  else if(a==='editPerson')formPerson(b.dataset.p);
  else if(a==='delPerson')delPerson(b.dataset.p);
  else if(a==='addJobFor')formJob({pessoa:b.dataset.p,tipo:'fixo',patrao:'',func:'',text:'',val:'',day:5,t13:'nao',fer:'nada',bonusMonth:12,extra:'',desc:0,sal:true});
+ else if(a==='mic'){e.preventDefault();micStart(b)}
+ else if(a==='speakTog'){e.preventDefault();SPEAK=!SPEAK;try{localStorage.setItem('cofre-voz',SPEAK?'1':'0')}catch(x){}if(!SPEAK&&window.speechSynthesis)speechSynthesis.cancel();b.textContent=SPEAK?'🔊':'🔇';b.setAttribute('aria-pressed',SPEAK);toast(SPEAK?'Vou ler as respostas em voz alta':'Respostas só em texto')}
  else if(a==='eye'){HIDE=!HIDE;try{localStorage.setItem('cofre-ocultar',HIDE?'1':'0')}catch(e){}render();toast(HIDE?'Valores escondidos':'Valores visíveis')}
  else if(a==='addInIn')formInIn();
  else if(a==='editClt')formClt();
