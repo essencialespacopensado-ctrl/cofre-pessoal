@@ -413,8 +413,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='1.7';
+const APP_VERSION='1.8';
 const CHANGELOG=[
+ ['1.8','11/10/2026',['Correção: a tela do Desenvolvedor agora reconhece a confirmação de e-mail na hora e mostra todos os usuários cadastrados.']],
  ['1.7','11/10/2026',['Desenvolvedor: lista de usuários mostra todos (inclusive você), com ativos, online agora, e-mail e último acesso.']],
  ['1.6','11/10/2026',['"Como usar" mais visível: item no menu, cartão de boas-vindas no Painel e botão na tela de entrar.']],
  ['1.5','11/10/2026',['Manual "Como usar" com fotos de todas as telas, aberto pelo botão 📘 Como usar.']],
@@ -482,7 +483,7 @@ async function startCloud(){
  },()=>{}));
  if(ME.owner){
   sub(db.collection('ideas').onSnapshot(q=>{const all={};q.docs.forEach(d=>{all[d.id]=((d.data()||{}).items||[]).map(x=>({...x}))});ALL=all;if(view==='admin')rerenderIdle()},()=>{}));
-  sub(db.collection('members').onSnapshot(q=>{const all={};q.docs.forEach(d=>{const x=d.data()||{};all[d.id]=x;NAMES[d.id]=x.name||x.email||''});MEMBERS=all;MEMBERS_ERR='';if(view==='admin')rerenderIdle()},e=>{MEMBERS_ERR=(e&&e.code)||'erro';if(view==='admin')rerenderIdle()}));
+  sub(db.collection('members').onSnapshot(q=>{const all={};q.docs.forEach(d=>{const x=d.data()||{};all[d.id]=x;NAMES[d.id]=x.name||x.email||''});MEMBERS=all;MEMBERS_ERR='';if(view==='admin')rerenderIdle()},e=>{MEMBERS_ERR=(e&&e.code)||'erro';if(view==='admin')rerenderIdle();if(!window.__devRetry&&AUTH&&AUTH.currentUser){window.__devRetry=1;AUTH.currentUser.getIdToken(true).then(()=>{resetSession();startCloud().then(()=>render())}).catch(()=>{})}}));
   sub(db.collection('access').onSnapshot(q=>{const all={};q.docs.forEach(d=>{all[d.id]=(d.data()||{}).status||'ok'});ACC=all;if(view==='admin')rerenderIdle()},()=>{}));
  }
  if(ACCESS!=='ok')return;
@@ -520,6 +521,7 @@ async function boot(){
   if(!u){ME={name:'',avatar:'',id:null,owner:false,email:''};S=demoCards(demo());locked=true;ready=true;view='painel';render();return}
   ready=false;locked=true;render();
   const email=(u.email||'').toLowerCase();
+  if(DEV_EMAILS.includes(email)){try{await u.reload()}catch(e){}try{u=AUTH.currentUser||u;await u.getIdToken(true)}catch(e){}}
   ME={name:pendingName||u.displayName||email.split('@')[0],email,avatar:'',id:u.uid,owner:DEV_EMAILS.includes(email)&&!!u.emailVerified,devPending:DEV_EMAILS.includes(email)&&!u.emailVerified};
   try{const l=localStorage.getItem(lsKey());const p=l?JSON.parse(l):null;S=p&&p.v?p:demoCards(demo())}catch(e){S=demoCards(demo())}
   await startCloud();
