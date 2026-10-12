@@ -502,6 +502,7 @@ function parseJob(t){
  m=raw.match(new RegExp('(?:comissao|extras?|horas extras|gorjeta|adicional)[^\\d]{0,30}'+mv));if(m)R2.extra=val(m);
  m=raw.match(/(?:desconto|desconta|descontar|inss|imposto|retencao)[^\d]{0,20}(\d{1,2}(?:,\d+)?)\s*%/);if(m)R2.desc=num(m[1].replace(',','.'));
  m=raw.match(/(?:comecei|comeco|entrei|desde|inicio)[^.;]{0,20}?(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s*(?:de\s*)?(\d{4}))?/);if(m){let y=m[2]||CUR.slice(0,4);if(/(comecei|comeco|entrei|desde|inicio)[^.;]{0,40}(ano passado)/.test(raw)&&!m[2])y=+CUR.slice(0,4)-1;if(/(comecei|comeco|entrei|desde|inicio)[^.;]{0,40}(retrasado)/.test(raw)&&!m[2])y=+CUR.slice(0,4)-2;R2.start=y+'-'+String(MESES.indexOf(m[1])+1).padStart(2,'0')}
+ if(/(abri mao|abro mao|sem|nao tem|nao recebo|nao deposita|dispensei|renunciei)[^.;]{0,15}(do\s+|de\s+|o\s+)?fgts/.test(raw))R2.noFgts=true;
  return R2;
 }
 
@@ -560,7 +561,7 @@ function balHTML(j){
  b.t13.forEach(t=>h+=row('13º de '+t.y+' ('+t.av+'/12)',t.dif>0.5?'falta '+R(t.dif):'ok','' +(t.dif>0.5?'neg':'pos'),'devido '+R0(t.dev)+' · recebido '+R0(t.got)));
  b.fer.forEach(f=>h+=row(f.k+'ª férias ('+dBR(f.ps).slice(3)+' a '+dBR(f.pe).slice(3)+')',f.dif>0.5?'falta '+R(f.dif):'ok',f.dif>0.5?'neg':'pos',f.lb+(f.venc?' · <b style="color:var(--bad)">venceu em '+dBR(f.limit)+' (pela lei, em dobro)</b>':f.dif>0.5?' · '+(f.dias<=90?'<b style="color:var(--warn)">':'')+'precisa tirar até '+dBR(f.limit)+(f.dias<=90?' (faltam '+f.dias+' dias)</b>':''):'')));
  if(b.prop)h+=row(b.prop.k+'ª férias (em andamento, '+b.prop.av+'/12)',R(b.prop.val),'','período '+dBR(b.prop.ps)+' a '+dBR(b.prop.pe)+' · completa em '+dBR(isoAddD(b.prop.pe,1)));
- h+=row('FGTS que seria depositado ('+b.meses+' meses)',R(b.fgts),'','8% ao mês — no acordo informal ninguém deposita');
+ if(!j.noFgts)h+=row('FGTS que seria depositado ('+b.meses+' meses)',R(b.fgts),'','8% ao mês — no acordo informal ninguém deposita');else h+=row('FGTS','combinado sem','','você abriu mão do FGTS neste acordo');
  return '<details class="billd" open style="margin-top:6px"><summary style="cursor:pointer;font-size:14px"><b>⚖️ Balanço desde '+dBR(jobStartD(j))+'</b> · '+(b.falta>0.5?'<span class="neg">falta receber '+R(b.falta)+'</span>':'<span class="pos">13º e férias em dia</span>')+'</summary><div class="items">'+h+
   '<div class="muted" style="font-size:12px">Referência: regras da CLT com o salário atual de '+R0(j.val)+'. Serve para você saber e negociar; não é orientação jurídica.</div></div></details>';
 }
@@ -655,8 +656,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.9';
+const APP_VERSION='2.10';
 const CHANGELOG=[
+ ['2.10','12/10/2026',['Acordo informal: opção "Abri mão do FGTS" — o FGTS sai do balanço e da comparação com a CLT.']],
  ['2.9','12/10/2026',['Acordo informal: data em que começou, "ainda trabalho aqui" e o que já recebeu (13º e férias de cada período).','Balanço pela referência da CLT: quanto falta de 13º e férias, férias vencendo ou vencidas (em dobro), proporcionais e FGTS.']],
  ['2.8','12/10/2026',['"Acordo com o patrão" agora se chama "Acordo informal".']],
  ['2.7','12/10/2026',['Acordo com o patrão (aba Trabalho): escreva o que foi combinado — mensal, 13º, férias, bônus, descontos — e veja quanto recebe até o fim do ano, comparando com a CLT.']],
@@ -1817,7 +1819,7 @@ function vTrab(){
   '<div class="muted" style="font-size:13px">'+lb13+' · '+lbF+(j.ferMonth&&j.fer!=='nada'?' em '+mLabel(j.ferMonth):'')+(num(j.bonus)?' · '+esc(j.bonusName||'bônus')+' '+R0(j.bonus)+' em '+mLabel(y+'-'+String(j.bonusMonth||12).padStart(2,'0')).split('/')[0]:'')+(num(j.extra)?' · extras ~'+R0(j.extra)+'/mês':'')+'</div>'+
   '<div class="stats"><div><div class="lb">Até dez/'+String(y).slice(2)+' você recebe</div><div class="vl pos">'+R(r.tot)+'</div></div><div><div class="lb">Só de extras (13º, bônus…)</div><div class="vl">'+R(r.ext)+'</div></div><div><div class="lb">Total no ano '+y+'</div><div class="vl">'+R(a.tot)+'</div></div></div>'+
   (ex?'<details class="billd" open><summary class="muted" style="cursor:pointer;font-size:13px">Extras previstos até o fim do ano</summary><div class="items">'+ex+'</div></details>':'')+
-  ((c.dif13>1||c.difFer>1)?'<div class="verdict warn" style="margin:6px 0 0;font-size:13px"><b>Se fosse CLT</b>, pela lei você teria a mais em '+y+': '+(c.dif13>1?'13º '+R0(c.dif13)+' · ':'')+(c.difFer>1?'1/3 de férias '+R0(c.difFer)+' · ':'')+'FGTS '+R0(c.fgts)+'. Bom saber na hora de negociar.</div>':'<div class="verdict good" style="margin:6px 0 0;font-size:13px">Esse acordo cobre o 13º e as férias que a CLT daria (sem contar FGTS de '+R0(c.fgts)+').</div>')+
+  ((c.dif13>1||c.difFer>1)?'<div class="verdict warn" style="margin:6px 0 0;font-size:13px"><b>Se fosse CLT</b>, pela lei você teria a mais em '+y+': '+(c.dif13>1?'13º '+R0(c.dif13)+' · ':'')+(c.difFer>1?'1/3 de férias '+R0(c.difFer)+(j.noFgts?'':' · '):'')+(j.noFgts?'':'FGTS '+R0(c.fgts))+'. Bom saber na hora de negociar.</div>':'<div class="verdict good" style="margin:6px 0 0;font-size:13px">Esse acordo cobre o 13º e as férias que a CLT daria'+(j.noFgts?' (FGTS: combinado sem).':' (sem contar FGTS de '+R0(c.fgts)+').')+'</div>')+
   balHTML(j0)+(j0.sal===false?'<div class="muted" style="font-size:12px">O pagamento mensal não foi colocado na previsão (você já tem o salário em Fixas). 13º, férias e bônus entram.</div>':'')+'<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editJob" data-id="'+j.id+'">Editar</button>'+delBtn('jobs',j.id)+'</div></section>'};
  const tot=js.reduce((a,j)=>a+jobYear({...j,sal:true},CUR,fim,true).tot,0)+(k?(()=>{let s=0;for(let m=CUR;diffM(m,fim)>=0;m=addM(m,1))s+=(m===CUR?0:k.mes.net)+extraIn(m).filter(x=>x.key.indexOf(':clt:')>0).reduce((a,x)=>a+x.val,0);return s})():0);
  return top('Trabalho','Salário, 13º, férias e acordos','<button class="btn primary" data-act="addJob">+ Acordo informal</button>')+
@@ -1853,21 +1855,22 @@ function formJob(j){
   '<label class="f">Mês do bônus (todo ano)<select name="bonusMonth">'+mo+'</select></label>'+
   '<label class="f">Extras/comissão por mês, média (R$)<input name="extra" type="number" inputmode="decimal" min="0" step="0.01" value="'+(j.extra||'')+'"></label>'+
   '<label class="f">Descontos combinados (%)<input name="pct" type="number" inputmode="decimal" min="0" max="100" step="0.01" value="'+(j.desc||0)+'" placeholder="INSS, imposto…"></label>'+
+  '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="noFgts" type="checkbox" style="width:auto"'+(j.noFgts?' checked':'')+'> Abri mão do FGTS neste acordo</label>'+
   '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="sal" type="checkbox" style="width:auto"'+(j.sal!==false?' checked':'')+'> Colocar o pagamento mensal na previsão '+(hasSal?'<span class="muted">(desmarque se já cadastrou esse salário em Fixas)</span>':'')+'</label>'+
   '<p class="muted full" id="jobPrev" style="margin:0;font-size:13px"></p></div>',f=>{
   if(!need(f,['desc','val']))return false;
-  upsert('jobs',{id:j.id||uid(),patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked});commit('Acordo salvo');});
+  upsert('jobs',{id:j.id||uid(),patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked,noFgts:f.noFgts.checked});commit('Acordo salvo');});
  const f=document.getElementById('sheetForm');
  const cur=()=>({val:num(f.val.value),day:num(f.day.value),start:(f.startDate.value||'').slice(0,7),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value,bonus:num(f.bonus.value),bonusMonth:+f.bonusMonth.value,bonusName:j.bonusName,extra:num(f.extra.value),desc:num(f.pct.value),sal:true,patrao:f.desc.value});
  const prev=()=>{const x=cur();if(!x.val){document.getElementById('jobPrev').innerHTML='Informe quanto recebe por mês.';return}const y=+CUR.slice(0,4);const r=jobYear(x,CUR,y+'-12',true);const c=jobVsClt(x,y);
-  document.getElementById('jobPrev').innerHTML='Até dezembro: <b class="mono">'+R(r.tot)+'</b> (mensal '+R0(r.sal)+' + extras '+R0(r.ext)+') · 13º previsto: <b>'+R0(jobNet(x,job13(x,y)))+'</b>'+((c.dif13>1||c.difFer>1)?' · pela CLT seria +'+R0(c.dif13+c.difFer)+' e FGTS '+R0(c.fgts):'')};
+  document.getElementById('jobPrev').innerHTML='Até dezembro: <b class="mono">'+R(r.tot)+'</b> (mensal '+R0(r.sal)+' + extras '+R0(r.ext)+') · 13º previsto: <b>'+R0(jobNet(x,job13(x,y)))+'</b>'+((c.dif13>1||c.difFer>1)?' · pela CLT seria +'+R0(c.dif13+c.difFer)+(f.noFgts.checked?'':' e FGTS '+R0(c.fgts)):'')};
  const reHist=()=>{const x={...j,startDate:f.startDate.value,working:f.working.checked,endDate:f.endDate.value,hist:readHist(f)};document.getElementById('endWrap').style.display=f.working.checked?'none':'';document.getElementById('jobHist').innerHTML=histHTML(x)};
  f.startDate.addEventListener('change',reHist);f.working.addEventListener('change',reHist);f.endDate.addEventListener('change',reHist);
  f.addEventListener('input',prev);f.addEventListener('change',prev);prev();
  document.getElementById('jobParse').onclick=()=>{const r=parseJob(f.text.value);let n=0;
   const set=(k,v)=>{if(v==null||v==='')return;const el=f[k];if(!el)return;if(el.type==='checkbox')el.checked=!!v;else el.value=v;n++};
   set('val',r.val);set('day',r.day);set('t13',r.t13);if(r.t13Split)set('t13Split',true);set('fer',r.fer);set('ferMonth',r.ferMonth);set('bonus',r.bonus);set('bonusMonth',r.bonusMonth);set('extra',r.extra);set('pct',r.desc);if(r.start){f.startDate.value=r.start+'-01';n++;reHist()}
-  if(r.h13!=null){const el=f.querySelector('[name=h13_'+(+CUR.slice(0,4)-1)+']');if(el){el.value=r.h13;n++}}if(r.bonusName)j.bonusName=r.bonusName;
+  if(r.h13!=null){const el=f.querySelector('[name=h13_'+(+CUR.slice(0,4)-1)+']');if(el){el.value=r.h13;n++}}if(r.bonusName)j.bonusName=r.bonusName;if(r.noFgts){f.noFgts.checked=true;n++}
   document.getElementById('jobParseMsg').textContent=n?'Preenchi '+n+' campo'+(n>1?'s':'')+'. Confira abaixo.':'Não entendi valores no texto. Preencha os campos abaixo.';prev()};
 }
 function formClt(){
