@@ -370,13 +370,23 @@ function demo(){
   budget:{},initial:{val:1500,month:addM(CUR,-1)}};
 }
 /* saldo em conta = saldo inicial + resultado de cada mês desde o mês inicial até o mês m */
+/* entradas do mês com dia: recebida (dia já passou ou marcou "Recebi") ou prevista */
+function receipts(m){
+ const out=[],td=TODAY.getDate(),g=S.got||{};
+ S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>out.push({key:m+':rin:'+r.id,kind:'Entrada fixa',name:r.desc,from:r.from||'',day:r.day||1,val:num(r.val)}));
+ (S.instIn||[]).filter(i=>inInMonth(i,m)).forEach(i=>out.push({key:m+':ini:'+i.id,kind:'Entrada parcelada '+(diffM(i.first,m)+1)+'/'+i.n,name:i.desc,from:i.from||'',day:i.day||10,val:inParcel(i)}));
+ S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m).forEach(t=>out.push({key:'tx:'+t.id,kind:'Entrada avulsa',name:t.desc,from:'',day:+t.date.slice(8,10)||1,val:num(t.val),tx:true}));
+ out.forEach(r=>{const d=diffM(m,CUR);r.auto=d>0||(d===0&&r.day<=td);r.got=g[r.key]!=null?!!g[r.key]:r.auto});
+ return out.sort((a,b)=>a.day-b.day);
+}
+function pendingIn(m){return receipts(m).filter(r=>!r.got).reduce((a,r)=>a+r.val,0)}
 function balanceAt(m){
  const ini=S.initial;if(!ini||!ini.month)return null;
  if(diffM(ini.month,m)<0)return num(ini.val);
- let b=num(ini.val);for(let k=ini.month;diffM(k,m)>=0;k=addM(k,1))b+=month(k).saldo;return b;
+ let b=num(ini.val);for(let k=ini.month;diffM(k,m)>=0;k=addM(k,1))b+=month(k).saldo-(diffM(k,CUR)<=0?pendingIn(k):0);return b;
 }
 function balanceProj(n){ // saldo previsto daqui a n meses
- const b=balanceAt(CUR);if(b==null)return null;let s=b;for(let k=1;k<=n;k++)s+=projSobra(addM(CUR,k));return s;
+ const b=balanceAt(CUR)+pendingIn(CUR);if(b==null)return null;let s=b;for(let k=1;k<=n;k++)s+=projSobra(addM(CUR,k));return s;
 }
 function blank(){return {v:1,demo:false,tx:[],rec:[],inst:[],instIn:[],goals:[],ideas:[],budget:{},cards:[],paid:{}}}
 function demoCards(s){ // adiciona cartões de exemplo e liga algumas compras a eles
@@ -442,8 +452,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.1';
+const APP_VERSION='2.2';
 const CHANGELOG=[
+ ['2.2','12/10/2026',['Entradas previstas: salário, entradas fixas e parceladas só entram no saldo em conta no dia delas. Até lá aparecem como "A receber" (aba A pagar e Painel), com botão Recebi.']],
  ['2.1','11/10/2026',['Entradas parceladas: cadastre dinheiro que vai receber em parcelas (aba Parcelados). Cada parcela entra sozinha na renda do mês, na previsão e no dízimo.']],
  ['2.0','11/10/2026',['Assistente "Pergunte qualquer coisa": leva até a tela certa e abre o formulário, responde com os seus números (saldo, gastos, parcelas, dízimo, vencimentos, metas) e pesquisa na internet.']],
  ['1.9','11/10/2026',['Categorias editáveis: criar, renomear, apagar e mudar explicação e % de todas as categorias de gastos e entradas (botão ⚙️ Categorias em Orçamento, Fixas e Lançamentos).']],
@@ -623,7 +634,7 @@ function buildNav(){
  setSync(syncState);
 }
 function render(){
- S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];
+ S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};
  const main=document.getElementById('main');
  document.body.classList.toggle('locked',locked||(ACCESS!=='ok'&&!ME.owner));
  if(ACCESS!=='ok'&&!ME.owner){main.innerHTML=vBlocked();return}
@@ -646,7 +657,7 @@ function vPainel(){
  const sobraProj=projSobra(addM(CUR,1));
  // categorias
  const cats=spentByCat(CUR);
- const bal=balanceAt(CUR);
+ const bal=balanceAt(CUR),pend=pendingIn(CUR);
  const catArr=Object.entries(cats).sort((a,b)=>b[1]-a[1]);const cmax=catArr.length?catArr[0][1]:1;
  // próximos vencimentos
  const d=TODAY.getDate();
@@ -659,10 +670,11 @@ function vPainel(){
  '<div class="grid g32">'+
   '<section class="card hero"><div class="hero-row"><div style="min-width:0">'+(bal!=null?
    '<div class="kpi"><div class="lb">Saldo em conta</div></div><div class="big '+(bal>=0?'':'neg')+'">'+R(bal)+'</div>'+
-   '<div class="muted" style="margin-top:6px;font-size:14px">Resultado de '+mLabel(CUR)+': <b class="mono '+(x.saldo>=0?'pos':'neg')+'">'+(x.saldo>=0?'+':'')+R(x.saldo)+'</b> · Saldo inicial '+R0(S.initial.val)+' em '+mLabel(S.initial.month)+' <button class="btn sm ghost" data-act="editInit" style="padding:2px 8px">Editar</button></div>'
+   '<div class="muted" style="margin-top:6px;font-size:14px">Resultado de '+mLabel(CUR)+' até hoje: <b class="mono '+(x.saldo-pend>=0?'pos':'neg')+'">'+(x.saldo-pend>=0?'+':'')+R(x.saldo-pend)+'</b> · Saldo inicial '+R0(S.initial.val)+' em '+mLabel(S.initial.month)+' <button class="btn sm ghost" data-act="editInit" style="padding:2px 8px">Editar</button></div>'
    :'<div class="kpi"><div class="lb">Resultado do mês</div></div><div class="big '+(x.saldo>=0?'':'neg')+'">'+R(x.saldo)+'</div>'+
    '<div style="margin-top:8px"><button class="btn sm" data-act="editInit">Informar saldo inicial</button></div>')+
-   '<div class="muted" style="margin-top:6px;font-size:14px">Entrou <b class="pos mono">'+R(x.entradas)+'</b> · Saiu <b class="neg mono">'+R(x.saidas)+'</b></div>'+
+   '<div class="muted" style="margin-top:6px;font-size:14px">Entrou <b class="pos mono">'+R(x.entradas-pend)+'</b>'+(pend>0?' · A receber <b class="mono" style="color:var(--accent)">'+R(pend)+'</b> <span style="font-size:12px">(previsto)</span>':'')+' · Saiu <b class="neg mono">'+R(x.saidas)+'</b></div>'+
+   (pend>0&&bal!=null?'<div class="muted" style="margin-top:4px;font-size:13px">Saldo previsto quando tudo cair: <b class="mono">'+R(bal+pend)+'</b> · <a href="#" data-go="pagar" style="color:var(--accent)">ver o que falta receber</a></div>':'')+
    (bal!=null?'<div style="margin-top:8px"><span class="chip '+(balanceProj(12)>=0?'acc':'bad')+'">Saldo previsto em '+mLabel(addM(CUR,12))+': '+R0(balanceProj(12))+'</span></div>':'')+
    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'+(sobraProj>=0?'<span class="chip good">Sobra prevista p/ '+mLabel(addM(CUR,1))+': '+R0(sobraProj)+'</span>':'<span class="chip bad">Falta prevista p/ '+mLabel(addM(CUR,1))+': '+R0(-sobraProj)+'</span>')+(df?'<span class="chip acc">Sem parcelas em '+mLabel(df,true)+'</span>':'<span class="chip good">Sem parcelas</span>')+'</div></div>'+
    ring(comp,gaugeCol)+'</div></section>'+
@@ -765,6 +777,11 @@ function billStatus(b,m){
  if(m===CUR||diffM(CUR,m)<0){if(dd<0)return ['bad','Atrasada'];if(dd===0)return ['warn','Vence hoje'];if(dd<=3)return ['warn','Vence em '+dd+' dia'+(dd>1?'s':'')]}
  return ['acc','Em aberto'];
 }
+function recRow(r,m){
+ const d=String(r.day).padStart(2,'0')+'/'+m.slice(5,7);
+ return '<div class="row"><div class="ic '+(r.got?'in':'')+'" style="'+(r.got?'':'color:var(--accent)')+'">'+String(r.day).padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(r.name)+'</div><div class="s">'+esc(r.kind)+(r.from?' · de '+esc(r.from):'')+' · '+(r.got?'recebida':'prevista para '+d)+'</div></div><div class="v '+(r.got?'pos':'')+'">'+R(r.val)+'</div>'+
+  '<div class="del" style="display:flex;gap:6px;align-items:center"><span class="chip '+(r.got?'good':'acc')+'">'+(r.got?'Recebido':'Previsto')+'</span>'+(r.tx?'':'<button class="btn sm '+(r.got?'ghost':'')+'" data-act="togGot" data-key="'+r.key+'" data-auto="'+(r.auto?1:0)+'" data-got="'+(r.got?1:0)+'">'+(r.got?'Não caiu':'Recebi')+'</button>')+'</div></div>';
+}
 function billRow(b,m){
  const [c,l]=billStatus(b,m);
  const head='<div class="ic '+(b.paid?'in':'out')+'">'+String(b.day).padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(b.name)+'</div><div class="s">'+esc(b.kind)+(b.to&&b.to!==b.name?' · Pagar para: <b style="color:var(--fg)">'+esc(b.to)+'</b>':'')+' · vence '+String(b.day).padStart(2,'0')+'/'+m.slice(5,7)+'</div></div><div class="v '+(b.paid?'muted':'')+'" style="'+(b.paid?'text-decoration:line-through':'')+'">'+R(b.val)+'</div>'+
@@ -783,7 +800,8 @@ function vPagar(){
  '<div class="grid g4" style="margin-bottom:16px">'+kpi('Total do mês',R(tot),list.length+' pagamento'+(list.length===1?'':'s'),'')+kpi('Já pago',R(pago),Math.round(tot?pago/tot*100:0)+'% concluído','pos')+kpi('Falta pagar',R(tot-pago),late.length?late.length+' atrasada'+(late.length>1?'s':''):'nada atrasado',late.length?'neg':'')+
   kpi('Próximo vencimento',next?String(next.day).padStart(2,'0')+'/'+m.slice(5,7):'—',next?esc(next.name)+' · '+R0(next.val):'tudo pago','acc')+'</div>'+
  '<div class="grid g32"><section class="card"><div class="hd"><h2>Pagamentos do mês</h2><div class="bar" style="width:140px"><i style="width:'+(tot?pago/tot*100:0)+'%"></i></div></div><div class="list">'+(list.length?list.map(b=>billRow(b,m)).join(''):'<div class="empty">Nada para pagar em '+mLabel(m,true)+'.</div>')+'</div>'+
- '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Toque numa fatura para ver as compras que estão nela.</p></section>'+
+ '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Toque numa fatura para ver as compras que estão nela.</p>'+
+ (()=>{const rs=receipts(m);const tr=rs.reduce((a,r)=>a+r.val,0),pr=rs.filter(r=>!r.got).reduce((a,r)=>a+r.val,0);return '<div class="hd" style="margin-top:22px"><h2>💰 A receber</h2><span class="muted mono" style="font-size:12px">'+(pr>0?'falta '+R0(pr)+' de '+R0(tr):'tudo recebido')+'</span></div><div class="list">'+(rs.length?rs.map(r=>recRow(r,m)).join(''):'<div class="empty">Nenhuma entrada em '+mLabel(m)+'.</div>')+'</div><p class="muted" style="font-size:12.5px;margin:12px 0 0">Salário e entradas fixas/parceladas ficam como <b>previstas</b> até o dia delas. Só depois entram no saldo em conta. Se caiu antes, toque em <b>Recebi</b>.</p>'})()+'</section>'+
  '<section class="card"><div class="hd"><h2>Meus cartões</h2><button class="btn sm primary" data-act="addCard">+ Cartão</button></div><div class="list">'+(cards||'<div class="empty">Cadastre seus cartões com o dia de fechamento e de vencimento.</div>')+'</div>'+
  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Ao lançar uma compra ou parcela, escolha o cartão. O app coloca na fatura certa sozinho.</p></section></div>';
 }
@@ -1590,6 +1608,7 @@ document.addEventListener('click',e=>{
  else if(a==='depGoal')formDep(find('goals',id));
  else if(a==='pPrev'){pagarMonth=addM(pagarMonth,-1);render()}
  else if(a==='pNext'){pagarMonth=addM(pagarMonth,1);render()}
+ else if(a==='togGot'){e.preventDefault();const k=b.dataset.key,auto=b.dataset.auto==='1',now=b.dataset.got!=='1';S.got=S.got||{};if(now===auto)delete S.got[k];else S.got[k]=now;S.demo=false;commit(now?'Marcado como recebido':'Marcado como previsto')}
  else if(a==='togPaid'){e.preventDefault();const k=b.dataset.key;if(S.paid[k])delete S.paid[k];else S.paid[k]=true;S.demo=false;commit(S.paid[k]?'Marcado como pago':'Pagamento desfeito')}
  else if(a==='addCard')formCard();
  else if(a==='editInit')formInit();
