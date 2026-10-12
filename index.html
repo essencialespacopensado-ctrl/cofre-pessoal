@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#070b14">
 <meta name="description" content="Cofre Pessoal: gestão financeira pessoal, dízimos, metas e orçamento.">
 <link rel="manifest" href="manifest.json">
+<script>(function(){var t="dark";try{t=localStorage.getItem("cofre-tema")||"dark"}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -383,6 +384,9 @@ async function sha(t){try{const b=await crypto.subtle.digest('SHA-256',new TextE
 
 /* ---------- persistência ---------- */
 function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{el.className='sync '+(s==='ok'?'ok':s==='busy'?'busy':'');el.querySelector('span').textContent=s==='ok'?'Salvo na nuvem':s==='busy'?'Salvando…':'Salvo neste aparelho'})}
+function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
+function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
 function lsKey(){return 'cofre-v1-'+(ME.id||'local')}
 function saveLocal(){try{localStorage.setItem(lsKey(),JSON.stringify(S))}catch(e){}}
 function persist(){
@@ -527,7 +531,7 @@ function render(){
  if(view==='admin'&&!ME.owner)view='painel';
  buildNav();
  const v={diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
- const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button><button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
+ const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
 }
@@ -923,7 +927,7 @@ function showShare(){
 /* Login */
 function vLogin(){
  const brand='<div class="brand" style="padding:0 0 18px"><i></i><div>COFRE<small>GESTÃO PESSOAL</small></div></div>';
- const foot='<p class="muted" style="font-size:12.5px;margin:16px 0 0">Seus dados são privados.</p>';
+ const foot='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px"><p class="muted" style="font-size:12.5px;margin:0">Seus dados são privados.</p>'+themeBtn()+'</div>';
  if(!ready)return '<div class="login"><div class="card hero lbox">'+brand+'<h1 style="font-size:24px">Carregando…</h1>'+foot+'</div></div>';
  if(LOCAL_ONLY)return '<div class="login"><div class="card hero lbox">'+brand+'<div class="eyebrow">Acesso</div><h1 style="font-size:28px;margin-bottom:14px">Entrar</h1><div class="who"><div><div style="font-weight:700">Modo local</div><div class="muted" style="font-size:12.5px">Os dados ficam só neste aparelho.</div></div></div><form id="localForm" class="form" style="grid-template-columns:1fr"><button class="btn primary" type="submit" style="justify-content:center;padding:12px">Entrar</button></form>'+foot+'</div></div>';
  const m=authMode,busy='';
@@ -969,7 +973,7 @@ async function doAuth(){
    pendingTerms=true;pendingName=name;
    const cred=await AUTH.createUserWithEmailAndPassword(email,pass);
    try{await cred.user.updateProfile({displayName:name})}catch(e){}
-   try{await cred.user.sendEmailVerification()}catch(e){}
+   if(DEV_EMAILS.includes(email.toLowerCase())){try{await cred.user.sendEmailVerification()}catch(e){}}
    ME.name=name;
   }else if(authMode==='reset'){
    if(!email)throw{msg:'Escreva o e-mail da sua conta.'};
@@ -1246,6 +1250,7 @@ document.addEventListener('click',e=>{
  else if(a==='togFam'){S.budgetFamily=S.budgetFamily===false;commit(S.budgetFamily?'Renda da família somada':'Usando só o seu salário')}
  else if(a==='resetBud'){S.budget={};commit('Percentuais padrão restaurados')}
  else if(a==='logout'){closeSheetQuiet();window.scrollTo(0,0);if(AUTH)AUTH.signOut();else{locked=true;render()}}
+ else if(a==='theme'){setTheme(getTheme()==='dark'?'light':'dark');render()}
  else if(a==='authMode'){authMode=b.dataset.m;render()}
  else if(a==='resendVerify'){const u=AUTH&&AUTH.currentUser;if(u)u.sendEmailVerification().then(()=>toast('E-mail enviado para '+u.email),()=>toast('Não consegui enviar agora. Tente mais tarde.'))}
  else if(a==='installApp'){if(deferredInstall){deferredInstall.prompt();deferredInstall.userChoice.finally(()=>{deferredInstall=null;closeSheetQuiet()})}}
