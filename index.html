@@ -743,8 +743,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.15';
+const APP_VERSION='2.16';
 const CHANGELOG=[
+ ['2.16','12/10/2026',['Simulador: opção de dar um bem na troca (valor do bem abate do financiamento e o custo mensal dele sai da conta).']],
  ['2.15','12/10/2026',['Simulador explica por que o saldo fica negativo (entrada maior que o saldo, sobra menor que a parcela ou saldo inicial não informado).']],
  ['2.14','12/10/2026',['Simulador refeito: compra parcelada grande cruzando todos os seus dados — sobra e saldo com e sem a compra mês a mês, mês mais apertado, menor saldo, quando termina e gráfico comparando.','Simulador mostra o saldo do mês atual considerando tudo.']],
  ['2.13','12/10/2026',['Dízimo e ofertas entram em todas as projeções (resumo, fim do mês, fim do ano, simulação, sobra prevista e metas).','Dízimo calculado também sobre 13º, férias e pagamentos do acordo informal/CLT.']],
@@ -1717,6 +1718,7 @@ function nowStatus(){ // saldo agora e fim do mês, cruzando tudo
  const x=month(CUR),bal=balanceAt(CUR),pend=pendingIn(CUR),varRest=Math.max(0,avgVarOut()-x.outVar),diz=titheOut(CUR);
  return {bal,pend,varRest,diz,fim:(bal==null?0:bal)+pend-varRest-diz,sobra:projSobra(addM(CUR,1))};
 }
+let SIMV={};
 function vSim(){
  const st=nowStatus();
  return top('Simulador de compra','Vale a pena comprar agora?','')+
@@ -1727,15 +1729,17 @@ function vSim(){
  '</div></section>'+
  '<div class="grid g32"><section class="card"><div class="hd"><h2>Dados da compra</h2></div><div class="form">'+
   '<p class="muted full" style="margin:0;font-size:12.5px">Os valores abaixo são um <b>exemplo</b> — troque pelos da compra que você quer fazer.</p>'+
-  '<label class="f full">O que você quer comprar<input id="sDesc" value="Carro usado"></label>'+
-  '<label class="f">Preço à vista (R$)<input id="sPrice" type="number" inputmode="decimal" min="0" step="100" value="45000"></label>'+
-  '<label class="f">Desconto à vista (%)<input id="sDisc" type="number" inputmode="decimal" min="0" step="0.5" value="5"></label>'+
-  '<label class="f">Entrada (R$)<input id="sDown" type="number" inputmode="decimal" min="0" step="100" value="10000"></label>'+
-  '<label class="f">Entrada paga em<input id="sDownM" type="month" value="'+CUR+'"></label>'+
-  '<label class="f">Nº de parcelas<input id="sN" type="number" inputmode="numeric" min="1" step="1" value="48"></label>'+
-  '<label class="f">Juros (% ao mês)<input id="sRate" type="number" inputmode="decimal" min="0" step="0.01" value="1.89"></label>'+
-  '<label class="f">1ª parcela em<input id="sFirst" type="month" value="'+addM(CUR,1)+'"></label>'+
-  '<label class="f">Custo mensal extra (R$)<input id="sExtra" type="number" inputmode="decimal" min="0" step="50" value="600"></label>'+
+  '<label class="f full">O que você quer comprar<input id="sDesc" value="'+esc(SIMV.sDesc!=null?SIMV.sDesc:'Carro usado')+'"></label>'+
+  '<label class="f">Preço à vista (R$)<input id="sPrice" type="number" inputmode="decimal" min="0" step="100" value="'+esc(SIMV.sPrice!=null?SIMV.sPrice:'45000')+'"></label>'+
+  '<label class="f">Desconto à vista (%)<input id="sDisc" type="number" inputmode="decimal" min="0" step="0.5" value="'+esc(SIMV.sDisc!=null?SIMV.sDisc:'5')+'"></label>'+
+  '<label class="f">Entrada em dinheiro (R$)<input id="sDown" type="number" inputmode="decimal" min="0" step="100" value="'+esc(SIMV.sDown!=null?SIMV.sDown:'10000')+'"></label>'+
+  '<div class="full scg" style="grid-template-columns:1fr;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);padding:10px 0"><label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="sTrade" type="checkbox"'+(SIMV.sTrade?' checked':'')+' style="width:auto"> 🔁 Dar um bem na troca</label>'+
+   '<div id="sTradeBox" class="scf" style="display:'+(SIMV.sTrade?'grid':'none')+';grid-template-columns:repeat(3,minmax(0,1fr))"><label class="f">Qual bem<input id="sTradeDesc" value="'+esc(SIMV.sTradeDesc||'')+'" placeholder="Ex.: meu carro atual"></label><label class="f">Valor do bem na troca (R$)<input id="sTradeVal" value="'+esc(SIMV.sTradeVal||'')+'" type="number" inputmode="decimal" min="0" step="100" placeholder="Ex.: 20000"></label><label class="f">Custo mensal dele (R$)<input id="sTradeCost" value="'+esc(SIMV.sTradeCost||'')+'" type="number" inputmode="decimal" min="0" step="50" placeholder="seguro, IPVA… que deixa de ter"></label></div></div>'+
+  '<label class="f">Entrada paga em<input id="sDownM" type="month" value="'+esc(SIMV.sDownM!=null?SIMV.sDownM:CUR)+'"></label>'+
+  '<label class="f">Nº de parcelas<input id="sN" type="number" inputmode="numeric" min="1" step="1" value="'+esc(SIMV.sN!=null?SIMV.sN:'48')+'"></label>'+
+  '<label class="f">Juros (% ao mês)<input id="sRate" type="number" inputmode="decimal" min="0" step="0.01" value="'+esc(SIMV.sRate!=null?SIMV.sRate:'1.89')+'"></label>'+
+  '<label class="f">1ª parcela em<input id="sFirst" type="month" value="'+esc(SIMV.sFirst!=null?SIMV.sFirst:addM(CUR,1))+'"></label>'+
+  '<label class="f">Custo mensal extra (R$)<input id="sExtra" type="number" inputmode="decimal" min="0" step="50" value="'+esc(SIMV.sExtra!=null?SIMV.sExtra:'600')+'"></label>'+
   '<p class="muted full" style="margin:0;font-size:12.5px">Custo extra: seguro, IPVA, manutenção, combustível, condomínio… o que o bem gera por mês depois de comprado.</p>'+
  '</div></section>'+
  '<section class="card"><div class="hd"><h2>Resultado</h2></div><div class="out-box" id="sOut"></div><div id="sVerdict"></div></section></div>'+
@@ -1745,9 +1749,11 @@ function vSim(){
 function simCalc(){
  const g=id=>num((document.getElementById(id)||{}).value),gv=id=>((document.getElementById(id)||{}).value||'');
  if(!document.getElementById('sOut'))return;
- const price=g('sPrice'),disc=g('sDisc'),down=Math.min(g('sDown'),price),n=Math.max(1,Math.round(g('sN'))),rate=g('sRate'),extra=g('sExtra');
+ document.querySelectorAll('#main input[id^=s]').forEach(el=>{SIMV[el.id]=el.type==='checkbox'?el.checked:el.value});
+ const tr=!!(document.getElementById('sTrade')||{}).checked;const tb=document.getElementById('sTradeBox');if(tb)tb.style.display=tr?'grid':'none';
+ const price=g('sPrice'),disc=g('sDisc'),trade=tr?Math.min(g('sTradeVal'),price):0,down=Math.min(g('sDown'),Math.max(0,price-trade)),n=Math.max(1,Math.round(g('sN'))),rate=g('sRate'),extra=Math.max(0,g('sExtra')-(tr?g('sTradeCost'):0));
  const downM=gv('sDownM')||CUR,first=gv('sFirst')||addM(CUR,1);
- const fin=Math.max(0,price-down),p=parcelaPrice(fin,n,rate),total=down+p*n,vista=price*(1-disc/100),diff=total-vista;
+ const fin=Math.max(0,price-down-trade),p=parcelaPrice(fin,n,rate),total=down+trade+p*n,vista=price*(1-disc/100),diff=total-vista;
  const last=addM(first,n-1),to=diffM(CUR,addM(last,3))>120?addM(CUR,120):addM(last,3);
  const sc={oneVal:down,oneM:downM,instVal:fin,instN:n,instRate:rate,instFrom:first,extra:-extra,extraFrom:first};
  const A=projRows(to),B=projRows(to,sc);
@@ -1758,11 +1764,12 @@ function simCalc(){
  const worst=B.reduce((a,r)=>r.sobra<a.sobra?r:a,B[0]),lowB=B.reduce((a,r)=>r.saldo<a.saldo?r:a,B[0]);
  const negM=B.filter(r=>r.sobra<0).length,firstNeg=B.find(r=>r.saldo<0);
  const endA=A.find(r=>r.m===last)||A[A.length-1],endB=B.find(r=>r.m===last)||B[B.length-1];
- const mVista=monthsToSave(Math.max(0,vista-down),0.8);
+ const mVista=monthsToSave(Math.max(0,vista-down-trade),0.8);
  document.getElementById('sOut').innerHTML=
+  (trade?k2('Bem na troca',R0(trade),esc(gv('sTradeDesc')||'bem dado na troca')+' · abate do valor','pos'):'')+
   k2('Parcela',R(p),n+'x · financiando '+R0(fin)+' · '+mLabel(first)+' a '+mLabel(last))+k2('Total pago',R0(total),'à vista sairia '+R0(vista))+
   k2('Custo de parcelar',R0(diff),diff>0?Math.round(diff/vista*100)+'% a mais':'sem custo extra',diff>vista*0.25?'neg':diff>0?'wrn':'pos')+
-  k2('Peso na renda',Math.round(pct*100)+'%','parcela + custo extra ('+R0(p+extra)+'/mês)',pct>0.3?'neg':pct>0.15?'wrn':'pos')+
+  k2('Peso na renda',Math.round(pct*100)+'%','parcela + custo extra ('+R0(p+extra)+'/mês)'+(tr&&g('sTradeCost')?' · já tirando '+R0(g('sTradeCost'))+' do bem atual':''),pct>0.3?'neg':pct>0.15?'wrn':'pos')+
   k2('Sobra por mês · sem',R0(sobA),'média durante as parcelas',sobA<0?'neg':'pos')+
   k2('Sobra por mês · com',R0(sobB),'média durante as parcelas',sobB<0?'neg':'pos')+
   k2('Mês mais apertado',mLabel(worst.m),'sobra '+R0(worst.sobra)+' com a compra',worst.sobra<0?'neg':'wrn')+
@@ -2209,7 +2216,7 @@ document.addEventListener('click',e=>{
  else if(a==='mNext'){lancMonth=addM(lancMonth,1);render()}
  else if(a==='clearDemo'){if(delArm!==b){delArm=b;b.textContent='Tem certeza? Toque de novo';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Apagar exemplos e começar'}},3500);return}S=blank();delArm=null;commit('Pronto! Comece cadastrando sua renda em Fixas.');view='fixas';render()}
  else if(a==='del'){if(!S[b.dataset.col]&&b.dataset.col!=='ideas')S[b.dataset.col]=[];if(delArm!==b){delArm=b;b.textContent='Confirmar';setTimeout(()=>{if(delArm===b){delArm=null;b.textContent='Excluir'}},3000);return}delArm=null;if(b.dataset.col==='ideas'){saveIdeas(getIdeas().filter(x=>x.id!==id));toast('Excluído');return}S.demo=false;S[b.dataset.col]=S[b.dataset.col].filter(x=>x.id!==id);commit('Excluído')}
- else if(a==='simToInst'){const g=k=>num(document.getElementById(k).value);formInst({desc:document.getElementById('sDesc').value,cat:'Transporte',total:Math.max(0,g('sPrice')-g('sDown')),n:Math.max(1,Math.round(g('sN'))),rate:g('sRate'),first:document.getElementById('sFirst').value||addM(CUR,1),day:10,pay:'Boleto'})}
+ else if(a==='simToInst'){const g=k=>num(document.getElementById(k).value);const tv=document.getElementById('sTrade').checked?g('sTradeVal'):0;formInst({desc:document.getElementById('sDesc').value,cat:'Transporte',total:Math.max(0,g('sPrice')-g('sDown')-tv),n:Math.max(1,Math.round(g('sN'))),rate:g('sRate'),first:document.getElementById('sFirst').value||addM(CUR,1),day:10,pay:'Boleto'})}
 });
 document.addEventListener('input',e=>{
  if(e.target.id==='offRange'){const l=document.getElementById('offLbl');if(l)l.textContent=String(e.target.value).replace('.',',')+'%'}
