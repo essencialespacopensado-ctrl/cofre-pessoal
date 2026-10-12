@@ -471,9 +471,9 @@ function job13(j,y){ // valor bruto do 13º no ano y
  if(j.end&&+j.end.slice(0,4)===y)meses=Math.min(meses,+j.end.slice(5,7));return v*meses/12;
 }
 function jobItems(j,m){ // o que este acordo paga no mês m
- const out=[];if(!num(j.val)&&!num(j.bonus))return out;const y=+m.slice(0,4),mm=+m.slice(5,7),nm=j.patrao||'Trabalho';
+ const out=[];if(!num(j.val)&&!num(j.bonus))return out;const y=+m.slice(0,4),mm=+m.slice(5,7),nm=(jobPessoa(j)!=='Eu'?jobPessoa(j)+' · ':'')+(j.patrao||'Trabalho');
  const act=jobActive(j,m);
- if(act&&j.sal!==false&&num(j.val))out.push({k:'sal',lb:'Pagamento mensal',day:num(j.day)||5,val:jobNet(j,num(j.val))});
+ if(act&&j.sal!==false&&num(j.val))out.push({k:'sal',lb:jobTipo(j)==='fixo'?'Salário':'Pagamento mensal',day:num(j.day)||5,val:jobNet(j,num(j.val))});
  if(act&&num(j.extra))out.push({k:'var',lb:'Extras/comissão (média)',day:num(j.day)||5,val:jobNet(j,num(j.extra))});
  const t=job13(j,y);
  if(t>0&&jobActive(j,m)||t>0&&j.end&&diffM(j.end,m)>=0&&mm===12&&+j.end.slice(0,4)===y){
@@ -639,6 +639,8 @@ function dupFind(col,o){ // devolve {kind,other,msg}
  const others=(S[col]||[]).filter(x=>x.id!==o.id);
  if(col==='jobs'&&o.sal!==false&&!o.dupOk){const r=S.rec.find(r=>r.type==='in'&&(near(r.val,o.val,0.10)||(r.cat==='Salário'&&nrm(r.desc).includes(nrm(o.patrao).split(' ')[0]||'#'))));
   if(r)return {kind:'jobSal',other:r,job:o,msg:'Você já tem <b>'+esc(r.desc)+'</b> de <b>'+R(r.val)+'</b> cadastrado em <b>Fixas</b>. Esse acordo com <b>'+esc(o.patrao)+'</b> ('+R(o.val)+'/mês) é <b>o mesmo salário</b>?'}}
+ if(col==='jobs'&&!o.dupOk){const oj=(S.jobs||[]).find(x=>x.id!==o.id&&!x.dupOk&&jobPessoa(x)===jobPessoa(o)&&x.sal!==false&&o.sal!==false&&near(x.val,o.val,0.10));
+  if(oj)return {kind:'jobJob',other:oj,msg:(jobPessoa(o)==='Eu'?'Você':'<b>'+esc(jobPessoa(o))+'</b>')+' já tem <b>'+esc(oj.patrao)+'</b> de <b>'+R(oj.val)+'</b>/mês. <b>'+esc(o.patrao)+'</b> ('+R(o.val)+') é <b>o mesmo trabalho</b>?'}}
  if(col==='rec'&&o.type==='in'){const j=(S.jobs||[]).find(j=>j.sal!==false&&!j.dupOk&&near(j.val,o.val,0.10));
   if(j)return {kind:'jobSal',other:o,job:j,msg:'Você já tem o acordo com <b>'+esc(j.patrao)+'</b> de <b>'+R(j.val)+'</b>/mês na aba <b>Trabalho</b>, que já entra na previsão. Essa entrada <b>'+esc(o.desc)+'</b> ('+R(o.val)+') é <b>o mesmo dinheiro</b>?'}}
  let d=null;
@@ -666,6 +668,13 @@ function saveChecked(col,o,msg,after){
    ['Voltar e editar',()=>{}]]);
   return false;
  }
+ if(d.kind==='jobJob'){
+  dupAsk(d.msg,[
+   ['Sim, é o mesmo — trocar o antigo por este (sem duplicar)',()=>{S.jobs=S.jobs.filter(x=>x.id!==d.other.id);doSave();toast('Trabalho atualizado, sem duplicar')}],
+   ['Não, são trabalhos diferentes — somar os dois',()=>{o.dupOk=1;doSave()}],
+   ['Voltar e editar',()=>{}]]);
+  return false;
+ }
  dupAsk(d.msg,[
   ['É outro — salvar mesmo assim',doSave],
   ['É o mesmo — não cadastrar de novo',()=>{closeSheetQuiet();render();toast('Nada foi duplicado')}],
@@ -674,6 +683,7 @@ function saveChecked(col,o,msg,after){
 }
 function dupWarnings(){ // duplicidades que já existem nos dados
  const w=[];(S.jobs||[]).filter(j=>j.sal!==false&&!j.dupOk).forEach(j=>{const r=S.rec.find(r=>r.type==='in'&&near(r.val,j.val,0.10));if(r)w.push({k:'js:'+j.id+':'+r.id,txt:'<b>'+esc(r.desc)+'</b> ('+R0(r.val)+', em Fixas) e o acordo com <b>'+esc(j.patrao)+'</b> ('+R0(j.val)+') podem ser o mesmo salário — está somando duas vezes.'})});
+ {const js=(S.jobs||[]).filter(j=>j.sal!==false&&!j.dupOk);js.forEach((a,i)=>js.slice(i+1).forEach(b=>{if(jobPessoa(a)===jobPessoa(b)&&near(a.val,b.val,0.10))w.push({k:'jj:'+b.id+':'+a.id,txt:'<b>'+esc(a.patrao)+'</b> e <b>'+esc(b.patrao)+'</b> ('+R0(b.val)+') de '+esc(jobPessoa(a)==='Eu'?'você':jobPessoa(a))+' podem ser o mesmo trabalho — está somando duas vezes.'})}))}
  const seen={};S.rec.forEach(r=>{const k=r.type+'|'+nrm(r.desc)+'|'+num(r.val);if(seen[k]&&!r.dupOk)w.push({k:'rr:'+r.id,txt:'<b>'+esc(r.desc)+'</b> ('+R0(r.val)+') aparece duas vezes em Fixas.'});seen[k]=1});
  const si={};S.inst.forEach(i=>{const k=nrm(i.desc)+'|'+num(i.total)+'|'+i.n;if(si[k]&&!i.dupOk)w.push({k:'ii:'+i.id,txt:'A compra parcelada <b>'+esc(i.desc)+'</b> aparece duas vezes.'});si[k]=1});
  return w;
@@ -684,8 +694,29 @@ function dupFix(k){
   dupAsk('<b>'+esc(r.desc)+'</b> ('+R(r.val)+') em Fixas e o acordo com <b>'+esc(j.patrao)+'</b> ('+R(j.val)+'/mês) são o mesmo dinheiro?',[
    ['Sim — deixar o acordo só para projeção (13º, férias, bônus)',()=>{j.sal=false;S.demo=false;commit('Salário contado uma vez só')}],
    ['Não, são rendas diferentes',()=>{j.dupOk=1;S.demo=false;commit('Ok, mantido')}],['Cancelar',()=>{}]]);return}
+ if(t==='jj'){const x=S.jobs.find(q=>q.id===a),y=S.jobs.find(q=>q.id===b);if(!x||!y)return;
+  dupAsk('<b>'+esc(y.patrao)+'</b> e <b>'+esc(x.patrao)+'</b> são o mesmo trabalho?',[['Sim — manter só "'+esc(y.patrao)+'"',()=>{S.jobs=S.jobs.filter(q=>q.id!==x.id);S.demo=false;commit('Sem duplicar')}],['Sim — manter só "'+esc(x.patrao)+'"',()=>{S.jobs=S.jobs.filter(q=>q.id!==y.id);S.demo=false;commit('Sem duplicar')}],['Não, são diferentes',()=>{x.dupOk=1;S.demo=false;commit('Ok, mantido')}],['Cancelar',()=>{}]]);return}
  if(t==='rr'){const r=S.rec.find(x=>x.id===a);if(!r)return;dupAsk('<b>'+esc(r.desc)+'</b> ('+R(r.val)+') está cadastrado duas vezes em Fixas. Apagar a cópia?',[['Apagar a cópia',()=>{S.rec=S.rec.filter(x=>x.id!==a);S.demo=false;commit('Cópia apagada')}],['São diferentes, manter',()=>{r.dupOk=1;S.demo=false;commit('Ok, mantido')}],['Cancelar',()=>{}]]);return}
  if(t==='ii'){const i=S.inst.find(x=>x.id===a);if(!i)return;dupAsk('A compra parcelada <b>'+esc(i.desc)+'</b> está duas vezes. Apagar a cópia?',[['Apagar a cópia',()=>{S.inst=S.inst.filter(x=>x.id!==a);S.demo=false;commit('Cópia apagada')}],['São diferentes, manter',()=>{i.dupOk=1;S.demo=false;commit('Ok, mantido')}],['Cancelar',()=>{}]]);return}
+}
+
+/* ===== Rendas da família: salários moram na aba Trabalho ===== */
+function jobPessoa(j){return (j.pessoa||'Eu').trim()||'Eu'}
+function jobTipo(j){return j.tipo||(j.t13==='nao'&&(!j.fer||j.fer==='nada')&&!num(j.bonus)&&!j.text?'fixo':'informal')}
+function pessoas(){const p=['Eu'];(S.jobs||[]).forEach(j=>{const x=jobPessoa(j);if(!p.includes(x))p.push(x)});return p}
+function jobIncomeFor(m){const o={sal:0,fam:0};(S.jobs||[]).filter(j=>j.sal!==false&&jobActive(j,m)).forEach(j=>{const v=jobNet(j,num(j.val)+num(j.extra));if(jobPessoa(j)==='Eu')o.sal+=v;else o.fam+=v});return o}
+function migrateSalaries(){
+ if(S.migSal)return;S.jobs=S.jobs||[];const T=tithe();
+ S.rec.filter(r=>r.type==='in'&&(r.cat==='Salário'||r.cat==='Renda da família')).forEach(r=>{
+  let j=S.jobs.find(x=>x.sal===false&&near(x.val,r.val,0.10));
+  if(j){j.sal=true;j.day=r.day||j.day;if(!j.start&&r.start)j.start=r.start}
+  else{j={id:'j'+r.id,pessoa:r.cat==='Renda da família'?(/espos|marid|mulher/i.test(r.desc)?(/marid/i.test(r.desc)?'Marido':'Esposa'):'Família'):'Eu',patrao:r.desc,func:'',tipo:'fixo',val:num(r.val),day:r.day||5,start:r.start||'',startDate:'',working:true,t13:'nao',fer:'nada',bonus:0,extra:0,desc:0,sal:true,hist:{}};S.jobs.push(j)}
+  const ok='rec-'+r.id,nk='ex-job:'+j.id+':sal';
+  [T.rows,T.pr].forEach(M=>Object.keys(M||{}).forEach(m=>{if(M[m]&&M[m][ok]){M[m][nk]=M[m][ok];delete M[m][ok]}}));
+  Object.keys(S.got||{}).forEach(k=>{const p=k.split(':');if(p[1]==='rin'&&p[2]===r.id){S.got[p[0]+':job:'+j.id+':sal']=S.got[k];delete S.got[k]}});
+  S.rec=S.rec.filter(x=>x.id!==r.id);
+ });
+ S.migSal=1;
 }
 /* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
 let projMonth=null;
@@ -739,7 +770,7 @@ function vProj(){
 }
 /* ===== Resumo geral: cruza todos os dados ===== */
 function budOver(m){
- const inc={sal:0,fam:0,ext:0};S.rec.filter(r=>r.type==='in'&&recActive(r,m)).concat(S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m)).forEach(r=>{const k=r.cat==='Salário'?'sal':r.cat==='Renda da família'?'fam':'ext';inc[k]+=num(r.val)});
+ const inc={sal:0,fam:0,ext:0};{const ji=jobIncomeFor(m);inc.sal+=ji.sal;inc.fam+=ji.fam}S.rec.filter(r=>r.type==='in'&&recActive(r,m)).concat(S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m)).forEach(r=>{const k=r.cat==='Salário'?'sal':r.cat==='Renda da família'?'fam':'ext';inc[k]+=num(r.val)});
  const base=inc.sal+inc.ext+(S.budgetFamily!==false?inc.fam:0),sp=spentByCat(m);const out=[];
  CAT_OUT.forEach(c=>{if(c==='Reserva e investimentos')return;const rec=base*budPct(c)/100,g=sp[c]||0;if(g>rec&&g>0)out.push([c,g-rec])});return out;
 }
@@ -858,8 +889,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.21';
+const APP_VERSION='2.22';
 const CHANGELOG=[
+ ['2.22','12/10/2026',['Aba Trabalho agora reúne as rendas da família: cada pessoa com seus trabalhos (salário fixo ou acordo informal) e o total da família no topo.','Salários que estavam em Fixas foram movidos para Trabalho (sem duplicar com o acordo).']],
  ['2.21','12/10/2026',['Evita duplicados: ao salvar algo parecido com um cadastro existente (mesmo valor ou nome), o app pergunta se é o mesmo.','Salário em Fixas + acordo informal com o mesmo valor: escolha "é o mesmo" e o acordo fica só para projeção (13º, férias, bônus).','Painel avisa duplicidades que já existem, com botão Resolver.']],
  ['2.20','12/10/2026',['Botão ← Voltar no topo de cada tela (volta para a tela anterior). O voltar do celular também funciona dentro do app.']],
  ['2.19','12/10/2026',['Toque nos números para ver como foram calculados: meses da projeção, saldo em conta, fim do mês e fim do ano — item por item (entradas, contas, parcelas, estimativa do dia a dia, dízimo e ofertas).']],
@@ -1079,7 +1111,7 @@ function goBack(){
 window.addEventListener('popstate',()=>{if(!goBack()&&view!=='painel'){view='painel';NAV_BACK=true;render()}});
 function backBtn(){return NAV_HIST.length?'<button class="btn sm ghost backbtn" data-act="back" title="Voltar">← Voltar'+(VIEW_NAMES[NAV_HIST[NAV_HIST.length-1]]?' para '+VIEW_NAMES[NAV_HIST[NAV_HIST.length-1]]:'')+'</button>':''}
 function render(){
- S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};S.deals=S.deals||[];S.jobs=S.jobs||[];S.clt=S.clt||null;
+ S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.rec=S.rec||[];S.jobs=S.jobs||[];try{migrateSalaries()}catch(e){console.error(e)}S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};S.deals=S.deals||[];S.jobs=S.jobs||[];S.clt=S.clt||null;
  const main=document.getElementById('main');
  document.body.classList.toggle('locked',locked||(ACCESS!=='ok'&&!ME.owner));
  if(ACCESS!=='ok'&&!ME.owner){main.innerHTML=vBlocked();return}
@@ -1220,10 +1252,10 @@ function delBtn(col,id){return '<button class="btn sm ghost danger" data-act="de
 /* Fixas */
 function vFixas(){
  const ins=S.rec.filter(r=>r.type==='in'),outs=S.rec.filter(r=>r.type==='out').sort((a,b)=>(a.day||0)-(b.day||0));
- const ti=ins.reduce((a,r)=>a+num(r.val),0),to=outs.reduce((a,r)=>a+num(r.val),0);
+ const ji=jobIncomeFor(CUR),tj=ji.sal+ji.fam,ti=ins.reduce((a,r)=>a+num(r.val),0)+tj,to=outs.reduce((a,r)=>a+num(r.val),0);
  const row=r=>'<div class="row"><div class="ic '+r.type+'">'+String(r.day||'—').padStart(2,'0')+'</div><div style="min-width:0"><div class="t">'+esc(r.desc)+'</div><div class="s">'+esc(r.cat)+' · todo dia '+(r.day||'—')+(r.start?' · desde '+mLabel(r.start):'')+'</div></div><div class="v '+(r.type==='in'?'pos':'')+'">'+R(r.val)+'</div><div class="del" style="display:flex;gap:4px"><button class="btn sm ghost" data-act="editRec" data-id="'+r.id+'">Editar</button>'+delBtn('rec',r.id)+'</div></div>';
  return top('Recorrentes','Entradas e contas fixas','<button class="btn sm" data-go="cats">⚙️ Categorias</button>'+'<button class="btn primary" data-act="addRec">'+icon('fixas')+'Nova recorrente</button>')+
- '<div class="grid g2"><section class="card"><div class="hd"><h2>Entradas fixas</h2><span class="chip good">'+R(ti)+'/mês</span></div><div class="list">'+(ins.length?ins.map(row).join(''):'<div class="empty">Cadastre seu salário ou renda que entra todo mês.</div>')+'</div></section>'+
+ '<div class="grid g2"><section class="card"><div class="hd"><h2>Entradas fixas</h2><span class="chip good">'+R(ti)+'/mês</span></div><div class="list">'+(tj?'<div class="row" data-go="trab" style="cursor:pointer"><div class="ic in">💼</div><div style="min-width:0"><div class="t">Salários e trabalhos da família</div><div class="s">ficam na aba Trabalho · toque para ver</div></div><div class="v pos">'+R(tj)+'</div></div>':'')+(ins.length?ins.map(row).join(''):(tj?'':'<div class="empty">Salários ficam na aba <b>Trabalho</b>. Aqui: aluguel recebido, pensão, outras rendas fixas.</div>'))+'</div><p class="muted" style="font-size:12.5px;margin:10px 0 0">Salário e trabalho de cada pessoa da família ficam na aba <a href="#" data-go="trab" style="color:var(--accent)">Trabalho</a>.</p></section>'+
  '<section class="card"><div class="hd"><h2>Contas fixas</h2><span class="chip bad">'+R(to)+'/mês</span></div><div class="list">'+(outs.length?outs.map(row).join(''):'<div class="empty">Aluguel, luz, água, internet, escola…</div>')+'</div></section></div>'+
  '<section class="card" style="margin-top:16px"><div class="hd"><h2>Saldo inicial</h2><button class="btn sm" data-act="editInit">'+(S.initial?'Editar':'Informar')+'</button></div>'+
  (S.initial?'<div class="kpi"><div class="vl mono">'+R(S.initial.val)+'</div><div class="sub">em conta no início de '+mLabel(S.initial.month,true)+'. Saldo atual: <b class="mono '+(balanceAt(CUR)>=0?'pos':'neg')+'">'+R(balanceAt(CUR))+'</b></div></div>':'<div class="empty" style="text-align:left;padding:4px 0">Informe quanto você tem hoje em conta para o app calcular seu saldo real.</div>')+'</section>'+
@@ -1271,7 +1303,7 @@ function vPagar(){
 let orcMonth=CUR;
 function vOrc(){
  const m=orcMonth;
- const inc={sal:0,fam:0,ext:0};
+ const inc={sal:0,fam:0,ext:0};{const ji=jobIncomeFor(m);inc.sal+=ji.sal;inc.fam+=ji.fam}
  S.rec.filter(r=>r.type==='in'&&recActive(r,m)).concat(S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m)).forEach(r=>{const k=r.cat==='Salário'?'sal':r.cat==='Renda da família'?'fam':'ext';inc[k]+=num(r.val)});
  const useFam=S.budgetFamily!==false;
  const base=inc.sal+inc.ext+(useFam?inc.fam:0);
@@ -1394,7 +1426,8 @@ const AS_ACTIONS={
  proj:()=>{goView('painel');setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},80)},
  clt:()=>goView('trab',()=>formClt()),
  trab:()=>goView('trab'),
- acordo:()=>goView('trab',()=>formJob()),
+ acordo:()=>goView('trab',()=>formJob({pessoa:'Eu',tipo:'informal',patrao:'',val:'',day:5,t13:'prop',fer:'simples',bonusMonth:12,desc:0,sal:true})),
+ trabAdd:()=>goView('trab',()=>formJob()),
  meta:()=>goView('metas',()=>formGoal()),
  saldoIni:()=>goView('fixas',()=>formInit()),
  oferta:()=>{dizTab='calc';goView('diz',()=>formOffer())},
@@ -1415,7 +1448,8 @@ const AS_KB=[
  [['entrada parcelada','entradas parceladas','parcelada','entrada','receber parcelado','recebo parcelado','receber em parcelas','vou receber','vendi parcelado','venda parcelada','me pagar parcelado','me devolver'],'Dinheiro que você vai <b>receber em parcelas</b> fica em <b>Parcelados → Entradas parceladas</b>. Abri o formulário: informe o valor total, nº de parcelas e o mês da 1ª.',[['Nova entrada parcelada','inParc']]],
  [['lancar gasto','gastei','gasto','despesa','comprei','compra','paguei','anotar gasto','registrar gasto'],'Gastos do dia a dia ficam em <b>Lançamentos</b>. Já abri o formulário: escolha <b>Gasto</b>, descrição, valor e categoria. Se foi no cartão de crédito, escolha o cartão e o valor vai para a fatura certa.',[['Novo gasto','gasto']]],
  [['recebi','entrada','receita','ganhei','renda extra','lancar entrada','pix recebido'],'Entradas avulsas ficam em <b>Lançamentos</b>. Abri o formulário já como <b>Entrada</b>.',[['Nova entrada','entrada']]],
- [['salario','conta fixa','fixa','fixas','recorrente','aluguel','luz','agua','energia','internet','celular','todo mes','mensalidade','assinatura','renda da familia','esposa','marido'],'O que se repete todo mês fica em <b>Fixas</b>: salário, renda da família, aluguel, luz, internet… Abri o formulário de nova recorrente.',[['Nova recorrente','fixa'],['Ver Fixas','v:fixas']]],
+ [['salario','renda da familia','renda da esposa','salario da esposa','esposa','marido','trabalho','emprego'],'Salários e rendas de cada pessoa da família ficam na aba <b>Trabalho</b>, com o total da família no topo.',[['Nova renda','trabAdd'],['Abrir Trabalho','trab']]],
+ [['conta fixa','fixa','fixas','recorrente','aluguel','luz','agua','energia','internet','celular','todo mes','mensalidade','assinatura'],'O que se repete todo mês fica em <b>Fixas</b>: salário, renda da família, aluguel, luz, internet… Abri o formulário de nova recorrente.',[['Nova recorrente','fixa'],['Ver Fixas','v:fixas']]],
  [['cartao','fatura','fechamento','cartoes','nubank','credito'],'Cartões ficam em <b>A pagar</b>. Cadastre o nome, o dia que a fatura fecha e o dia de pagamento: o app monta cada fatura sozinho.',[['Cadastrar cartão','cartao'],['Ver A pagar','v:pagar']]],
  [['pagar','a pagar','vencimento','vence','atrasad','boleto','contas do mes','para quem pagar'],'Em <b>A pagar</b> está tudo o que vence no mês, com para quem pagar, data e valor. Toque em <b>Paguei</b> quando pagar.',[['Abrir A pagar','v:pagar']]],
  [['parcel','prestacao','financiamento','parcelado','parcelada','carne','em vezes','x de'],'Compras parceladas ficam em <b>Parcelados</b>: o app mostra a parcela, quanto falta e o mês em que você quita.',[['Nova compra parcelada','parcela'],['Ver Parcelados','v:parc']]],
@@ -2044,6 +2078,7 @@ function formRec(r){
   '<label class="f">Pagar para (quem recebe)<input name="to" value="'+esc(r.to||'')+'" placeholder="Ex.: Imobiliária, Celesc"></label>'+
   cardField(r.cardId,'Cai no cartão (opcional)')+'</div>',f=>{
   if(!need(f,['desc','val']))return false;
+  {const tp=f.querySelector('.seg').dataset.val;if(tp==='in'&&!r.id&&(f.cat.value==='Salário'||f.cat.value==='Renda da família')){S.jobs=S.jobs||[];const jj={id:uid(),pessoa:f.cat.value==='Renda da família'?'Família':'Eu',patrao:f.desc.value.trim(),tipo:'fixo',val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||1))),start:f.start.value||CUR,startDate:'',working:true,t13:'nao',fer:'nada',bonus:0,extra:0,desc:0,sal:true,hist:{}};const rr=saveChecked('jobs',jj,'Salário salvo na aba Trabalho');return rr}}
   return saveChecked('rec',{id:r.id||uid(),type:f.querySelector('.seg').dataset.val,desc:f.desc.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||1))),cat:f.cat.value,start:f.start.value||CUR,to:f.to.value.trim(),cardId:f.card.value||null},'Recorrente salva');});
 }
 function formInst(i){
@@ -2119,7 +2154,7 @@ function vTrab(){
   '<details class="billd" style="margin-top:6px"><summary class="muted" style="cursor:pointer;font-size:13px">Ver cronograma ('+t.sc.length+')</summary><div class="items">'+t.sc.map(x=>'<div><span>'+String(x.day).padStart(2,'0')+'/'+x.m.slice(5,7)+'/'+x.m.slice(2,4)+' · '+x.lb+'</span><span class="mono">'+R(x.val)+'</span></div>').join('')+'</div></details>'+
   '<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editDeal" data-id="'+d.id+'">Editar</button>'+delBtn('deals',d.id)+'</div></section>'};
  const js=S.jobs||[],fim=y+'-12';
- const jcard=j0=>{const j={...j0,sal:true};const r=jobYear(j,CUR,fim,true),a=jobYear(j,y+'-01',fim),c=jobVsClt(j,y);
+ const jcard=j0=>{if(jobTipo(j0)==='fixo')return '<section class="card pcard" style="align-self:start"><div class="top"><div style="min-width:0"><div class="nm">'+esc(j0.patrao||'Renda')+'</div><div class="muted" style="font-size:13px">Salário fixo · dia '+(j0.day||5)+(j0.start?' · desde '+mLabel(j0.start):'')+(num(j0.desc)?' · desconto '+String(j0.desc).replace('.',',')+'%':'')+'</div></div><span class="chip good">'+R(jobNet(j0,num(j0.val)))+'/mês</span></div>'+(j0.sal===false?'<div class="muted" style="font-size:12px">Só para projeção (não soma no mês).</div>':'')+'<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editJob" data-id="'+j0.id+'">Editar</button>'+delBtn('jobs',j0.id)+'</div></section>';const j={...j0,sal:true};const r=jobYear(j,CUR,fim,true),a=jobYear(j,y+'-01',fim),c=jobVsClt(j,y);
   const lb13={int:'13º inteiro',metade:'13º pela metade',prop:'13º proporcional',nao:'sem 13º'}[j.t13||'nao'],lbF={terco:'férias pagas + 1/3',simples:'férias pagas (sem 1/3)',nao:'férias sem pagamento',nada:'férias não combinadas'}[j.fer||'nada'];
   const ex=r.rows.flatMap(x=>x.it.filter(i=>!(i.k==='sal'||i.k==='var')).map(i=>'<div><span>'+mLabel(x.m)+' · '+esc(i.lb)+'</span><span class="mono '+(i.val<0?'neg':'')+'">'+R(i.val)+'</span></div>')).join('');
   return '<section class="card pcard"><div class="top"><div style="min-width:0"><div class="nm">'+esc(j.patrao||'Trabalho')+'</div><div class="muted" style="font-size:13px">'+esc(j.func||'')+(j.func?' · ':'')+R(j.val)+'/mês · dia '+(j.day||5)+(jobStartD(j)?' · desde '+dBR(jobStartD(j)):'')+(j.working===false?' · saiu em '+dBR(j.endDate):'')+(num(j.desc)?' · desconto '+String(j.desc).replace('.',',')+'%':'')+'</div></div><span class="chip acc">'+lb13+'</span></div>'+
@@ -2130,10 +2165,17 @@ function vTrab(){
   ((c.dif13>1||c.difFer>1)?'<div class="verdict warn" style="margin:6px 0 0;font-size:13px"><b>Se fosse CLT</b>, pela lei você teria a mais em '+y+': '+(c.dif13>1?'13º '+R0(c.dif13)+' · ':'')+(c.difFer>1?'1/3 de férias '+R0(c.difFer)+(j.noFgts?'':' · '):'')+(j.noFgts?'':'FGTS '+R0(c.fgts))+'. Bom saber na hora de negociar.</div>':'<div class="verdict good" style="margin:6px 0 0;font-size:13px">Esse acordo cobre o 13º e as férias que a CLT daria'+(j.noFgts?' (FGTS: combinado sem).':' (sem contar FGTS de '+R0(c.fgts)+').')+'</div>')+
   balHTML(j0)+(j0.sal===false?'<div class="muted" style="font-size:12px">O pagamento mensal não foi colocado na previsão (você já tem o salário em Fixas). 13º, férias e bônus entram.</div>':'')+'<div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm ghost" data-act="editJob" data-id="'+j.id+'">Editar</button>'+delBtn('jobs',j.id)+'</div></section>'};
  const tot=js.reduce((a,j)=>a+jobYear({...j,sal:true},CUR,fim,true).tot,0)+(k?(()=>{let s=0;for(let m=CUR;diffM(m,fim)>=0;m=addM(m,1))s+=(m===CUR?0:k.mes.net)+extraIn(m).filter(x=>x.key.indexOf(':clt:')>0).reduce((a,x)=>a+x.val,0);return s})():0);
- return top('Trabalho','Salário, 13º, férias e acordos','<button class="btn primary" data-act="addJob">+ Acordo informal</button>')+
- (js.length||k?'<section class="card hero" style="margin-bottom:16px"><div class="kpi"><div class="lb">Projeção até o fim de '+y+' · do seu trabalho</div></div><div class="big">'+R(tot)+'</div><div class="muted" style="margin-top:6px;font-size:14px">É o que ainda vai entrar de '+mLabel(CUR)+' até dezembro, contando salário, 13º, férias e bônus combinados.</div><div style="margin-top:12px"><button class="btn sm" data-act="projDez">🔮 Ver como fico em dezembro</button></div></section>':'')+
- '<h2 style="margin:6px 0 6px">🤝 Acordo informal</h2><p class="muted" style="margin:0 0 12px;font-size:13px">Para quem trabalha <b>sem carteira</b> ou com combinado próprio. Escreva o que foi acordado com o patrão (quanto paga, dia, se paga 13º, férias, bônus, descontos). O app monta a previsão até o fim do ano e compara com o que a CLT daria.</p>'+
- (js.length?'<div class="grid g2">'+js.map(jcard).join('')+'</div>':'<section class="card"><div class="empty">Nenhum acordo ainda. Toque em <b>+ Acordo informal</b>.</div></section>')+
+ const ps=pessoas().filter(p=>js.some(j=>jobPessoa(j)===p));const ji=jobIncomeFor(CUR);const outras=S.rec.filter(r=>r.type==='in'&&recActive(r,CUR));const tOut=outras.reduce((a,r)=>a+num(r.val),0);
+ const famTot=ji.sal+ji.fam+tOut+(k?k.mes.net:0);
+ const fam='<section class="card hero" style="margin-bottom:16px"><div class="kpi"><div class="lb">👨‍👩‍👧 Renda da família por mês</div></div><div class="big">'+R(famTot)+'</div>'+
+  '<div class="rgrid" style="margin-top:10px">'+ps.map(p=>{const t=js.filter(j=>jobPessoa(j)===p&&j.sal!==false&&jobActive(j,CUR)).reduce((a,j)=>a+jobNet(j,num(j.val)+num(j.extra)),0);return '<div class="rrow"><span class="ri">👤</span><span class="rt">'+esc(p)+' · '+js.filter(j=>jobPessoa(j)===p).length+' renda(s)</span><span class="rv mono pos">'+R0(t)+'</span></div>'}).join('')+
+  (k?'<div class="rrow"><span class="ri">💼</span><span class="rt">CLT (líquido)</span><span class="rv mono pos">'+R0(k.mes.net)+'</span></div>':'')+
+  (outras.length?'<div class="rrow" data-go="fixas"><span class="ri">🏠</span><span class="rt">Outras entradas fixas (aba Fixas)</span><span class="rv mono pos">'+R0(tOut)+'</span></div>':'')+'</div>'+
+  (js.some(j=>j.sal===false)?'<div class="muted" style="font-size:12.5px;margin-top:8px">Rendas marcadas "só para projeção" não entram no total mensal.</div>':'')+'</section>';
+ return top('Trabalho','Rendas da família','<button class="btn primary" data-act="addJob">+ Renda / trabalho</button>')+fam+
+ (js.length||k?'<section class="card hero" style="margin-bottom:16px"><div class="kpi"><div class="lb">Projeção até o fim de '+y+' · do trabalho da família</div></div><div class="big">'+R(tot)+'</div><div class="muted" style="margin-top:6px;font-size:14px">É o que ainda vai entrar de '+mLabel(CUR)+' até dezembro, contando salário, 13º, férias e bônus combinados.</div><div style="margin-top:12px"><button class="btn sm" data-act="projDez">🔮 Ver como fico em dezembro</button></div></section>':'')+
+ (js.length?ps.map(p=>'<h2 style="margin:18px 0 10px">👤 '+esc(p)+'</h2><div class="grid g2">'+js.filter(j=>jobPessoa(j)===p).map(jcard).join('')+'</div>').join(''):'<section class="card"><div class="empty">Nenhuma renda ainda. Toque em <b>+ Renda / trabalho</b> e cadastre o salário de cada pessoa da família.</div></section>')+
+ '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Tipo <b>Salário fixo</b>: só o valor do mês. Tipo <b>Acordo informal</b>: combinado com o patrão, com 13º, férias, bônus, histórico e comparação com a CLT.</p>'+
  '<section class="card" style="margin-top:22px"><div class="hd"><h2>💼 Emprego CLT · pela lei</h2>'+(k?'<span class="chip good">ativo</span>':'')+'</div>'+clt+'</section>'+
  (ds.length?'<h2 style="margin:26px 0 12px">🧾 Serviços para clientes</h2><div class="grid g2">'+ds.map(dcard).join('')+'</div>':'');
 }
@@ -2141,19 +2183,24 @@ function vTrab(){
 function readHist(f){const h={};f.querySelectorAll('[name^=h13_],[name^=hfer_]').forEach(el=>{const isF=el.name.startsWith('hfer_');const k=isF?'fer:'+el.name.slice(5):'13:'+el.name.slice(4);const v=f.querySelector('[name='+(isF?'hferv_':'h13v_')+el.name.split('_')[1]+']');if(el.value)h[k]={st:el.value,val:v?num(v.value):0}});return h}
 function formJob(j){
  const hasSal=S.rec.some(r=>r.type==='in'&&(r.cat==='Salário'));
- j=j||{patrao:'',func:'',text:'',val:'',day:5,start:'',end:'',t13:'prop',t13Split:false,fer:'simples',ferMonth:'',bonus:'',bonusName:'',bonusMonth:12,extra:'',desc:0,sal:!hasSal};
+ j=j||{pessoa:'Eu',tipo:'fixo',patrao:'',func:'',text:'',val:'',day:5,start:'',end:'',t13:'nao',t13Split:false,fer:'nada',ferMonth:'',bonus:'',bonusName:'',bonusMonth:12,extra:'',desc:0,sal:true};const tp0=jobTipo(j);
  const mo=[1,2,3,4,5,6,7,8,9,10,11,12].map(i=>'<option value="'+i+'"'+(+j.bonusMonth===i?' selected':'')+'>'+mLabel(CUR.slice(0,4)+'-'+String(i).padStart(2,'0'),true).split(' ')[0]+'</option>').join('');
  const sel=(n,o,v)=>'<select name="'+n+'">'+o.map(([k,l])=>'<option value="'+k+'"'+(k===v?' selected':'')+'>'+l+'</option>').join('')+'</select>';
- openSheet(j.id?'Editar acordo informal':'Novo acordo informal','<div class="form">'+
+ openSheet(j.id?'Editar renda / trabalho':'Nova renda / trabalho','<div class="form">'+
+  '<label class="f">De quem é essa renda<input name="pessoa" list="pessoasDL" value="'+esc(jobPessoa(j))+'" placeholder="Eu, Esposa, Filho…"><datalist id="pessoasDL">'+pessoas().concat(['Esposa','Marido','Filho','Filha']).filter((v,i,a)=>a.indexOf(v)===i).map(p=>'<option value="'+esc(p)+'">').join('')+'</datalist></label>'+
+  '<label class="f">Tipo'+sel('tipo',[['fixo','Salário fixo (simples)'],['informal','Acordo informal (13º, férias, bônus, histórico)']],tp0)+'</label>'+
+  '<div class="full jobadv" style="display:'+(tp0==='informal'?'contents':'none')+'">'+
   '<label class="f full">O que foi combinado (escreva do seu jeito)<textarea name="text" rows="4" placeholder="Ex.: Combinei com o pastor R$ 2.000 por mês, pago todo dia 5. Ele paga 13º proporcional em dezembro, férias em janeiro sem o 1/3 e uma gratificação de R$ 500 no Natal. Desconto de 11% de INSS.">'+esc(j.text||'')+'</textarea></label>'+
   '<div class="full"><button type="button" class="btn sm" id="jobParse">✨ Preencher a partir do texto</button> <span class="muted" style="font-size:12.5px" id="jobParseMsg"></span></div>'+
-  '<label class="f">Patrão / empresa<input name="desc" value="'+esc(j.patrao)+'" placeholder="Ex.: Igreja Central"></label>'+
+  '</div>'+
+  '<label class="f">Onde trabalha / nome da renda<input name="desc" value="'+esc(j.patrao)+'" placeholder="Ex.: Móveis, Escola, Aposentadoria"></label>'+
   '<label class="f">Função (opcional)<input name="func" value="'+esc(j.func||'')+'" placeholder="Ex.: Sonoplasta"></label>'+
   '<label class="f">Quanto recebe por mês (R$)<input name="val" type="number" inputmode="decimal" min="0" step="0.01" value="'+(j.val||'')+'"></label>'+
   '<label class="f">Dia do pagamento<input name="day" type="number" inputmode="numeric" min="1" max="31" value="'+(j.day||5)+'"></label>'+
   '<label class="f">Data em que comecei<input name="startDate" type="date" value="'+jobStartD(j)+'"></label>'+
   '<label class="f" style="flex-direction:row;align-items:center;gap:8px;align-self:end"><input name="working" type="checkbox" style="width:auto"'+(j.working!==false?' checked':'')+'> Ainda trabalho aqui</label>'+
   '<label class="f" id="endWrap" style="'+(j.working!==false?'display:none':'')+'">Data de saída<input name="endDate" type="date" value="'+(j.endDate||'')+'"></label>'+
+  '<div class="full jobadv" style="display:'+(tp0==='informal'?'contents':'none')+'">'+
   '<div class="full hist"><div class="lb mono muted" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:6px 0">O que já recebi</div><div id="jobHist">'+histHTML(j)+'</div></div>'+
   '<div class="full lb mono muted" style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:10px 0 0">Daqui pra frente (o que foi combinado)</div>'+'<label class="f">13º salário'+sel('t13',[['int','Paga inteiro'],['prop','Paga proporcional aos meses'],['metade','Paga metade'],['nao','Não paga 13º']],j.t13||'nao')+'</label>'+
   '<label class="f" style="flex-direction:row;align-items:center;gap:8px;align-self:end"><input name="t13Split" type="checkbox" style="width:auto"'+(j.t13Split?' checked':'')+'> 13º em 2 vezes (nov. e dez.)</label>'+
@@ -2162,17 +2209,19 @@ function formJob(j){
   '<label class="f">Bônus / gratificação (R$)<input name="bonus" type="number" inputmode="decimal" min="0" step="0.01" value="'+(j.bonus||'')+'" placeholder="Ex.: cesta ou ajuda de Natal"></label>'+
   '<label class="f">Mês do bônus (todo ano)<select name="bonusMonth">'+mo+'</select></label>'+
   '<label class="f">Extras/comissão por mês, média (R$)<input name="extra" type="number" inputmode="decimal" min="0" step="0.01" value="'+(j.extra||'')+'"></label>'+
-  '<label class="f">Descontos combinados (%)<input name="pct" type="number" inputmode="decimal" min="0" max="100" step="0.01" value="'+(j.desc||0)+'" placeholder="INSS, imposto…"></label>'+
+  '</div>'+
+  '<label class="f">Descontos (%) <small class="muted">INSS, imposto…</small><input name="pct" type="number" inputmode="decimal" min="0" max="100" step="0.01" value="'+(j.desc||0)+'" placeholder="INSS, imposto…"></label>'+
   '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="noFgts" type="checkbox" style="width:auto"'+(j.noFgts?' checked':'')+'> Abri mão do FGTS neste acordo</label>'+
   '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="sal" type="checkbox" style="width:auto"'+(j.sal!==false?' checked':'')+'> Colocar o pagamento mensal na previsão '+(hasSal?'<span class="muted">(desmarque se já cadastrou esse salário em Fixas)</span>':'')+'</label>'+
   '<p class="muted full" id="jobPrev" style="margin:0;font-size:13px"></p></div>',f=>{
   if(!need(f,['desc','val']))return false;
-  return saveChecked('jobs',{id:j.id||uid(),patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked,noFgts:f.noFgts.checked,dupOk:j.dupOk},'Acordo salvo');});
+  return saveChecked('jobs',{id:j.id||uid(),pessoa:(f.pessoa.value||'Eu').trim(),tipo:f.tipo.value,patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked,noFgts:f.noFgts.checked,dupOk:j.dupOk},'Acordo salvo');});
  const f=document.getElementById('sheetForm');
  const cur=()=>({val:num(f.val.value),day:num(f.day.value),start:(f.startDate.value||'').slice(0,7),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value,bonus:num(f.bonus.value),bonusMonth:+f.bonusMonth.value,bonusName:j.bonusName,extra:num(f.extra.value),desc:num(f.pct.value),sal:true,patrao:f.desc.value});
  const prev=()=>{const x=cur();if(!x.val){document.getElementById('jobPrev').innerHTML='Informe quanto recebe por mês.';return}const y=+CUR.slice(0,4);const r=jobYear(x,CUR,y+'-12',true);const c=jobVsClt(x,y);
   document.getElementById('jobPrev').innerHTML='Até dezembro: <b class="mono">'+R(r.tot)+'</b> (mensal '+R0(r.sal)+' + extras '+R0(r.ext)+') · 13º previsto: <b>'+R0(jobNet(x,job13(x,y)))+'</b>'+((c.dif13>1||c.difFer>1)?' · pela CLT seria +'+R0(c.dif13+c.difFer)+(f.noFgts.checked?'':' e FGTS '+R0(c.fgts)):'')};
  const reHist=()=>{const x={...j,startDate:f.startDate.value,working:f.working.checked,endDate:f.endDate.value,hist:readHist(f)};document.getElementById('endWrap').style.display=f.working.checked?'none':'';document.getElementById('jobHist').innerHTML=histHTML(x)};
+ f.tipo.addEventListener('change',()=>{document.querySelectorAll('#sheetForm .jobadv').forEach(el=>el.style.display=f.tipo.value==='informal'?'contents':'none');if(f.tipo.value==='fixo'){f.t13.value='nao';f.fer.value='nada'}});
  f.startDate.addEventListener('change',reHist);f.working.addEventListener('change',reHist);f.endDate.addEventListener('change',reHist);
  f.addEventListener('input',prev);f.addEventListener('change',prev);prev();
  document.getElementById('jobParse').onclick=()=>{const r=parseJob(f.text.value);let n=0;
