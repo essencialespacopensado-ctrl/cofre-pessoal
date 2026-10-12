@@ -195,6 +195,15 @@ body.locked main{max-width:none}
 @media (prefers-reduced-motion:reduce){.updpill{animation:none}}
 @media (max-width:760px){.updpill{bottom:calc(78px + env(safe-area-inset-bottom,0px))}}
 .newsl{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:3px}
+.navbtn.guide{color:var(--fg);border-color:color-mix(in srgb,var(--accent2) 55%,transparent);background:linear-gradient(90deg,color-mix(in srgb,var(--accent2) 22%,transparent),color-mix(in srgb,var(--accent) 10%,transparent));text-decoration:none;margin-bottom:8px}
+.navbtn.guide svg{color:var(--accent2)}
+.guidebtn{border-color:var(--accent2);color:var(--fg);background:color-mix(in srgb,var(--accent2) 18%,var(--panel2))}
+.guidecard{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:16px;border-color:color-mix(in srgb,var(--accent2) 50%,var(--line));background:linear-gradient(110deg,color-mix(in srgb,var(--accent2) 16%,var(--panel)),var(--panel) 70%)}
+.guidecard h2{font-size:20px}
+.gc-ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04101c;flex:none}
+.gc-ic svg{width:26px;height:26px}
+.gc-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media (max-width:760px){.mobilenav .navbtn.guide{margin-bottom:0}}
 .reply{margin-top:8px;padding:8px 12px;border-radius:10px;border-left:3px solid var(--accent);background:var(--panel2);font-size:13.5px}
 svg text{font-family:var(--f-mono)}
 .legend{display:flex;gap:16px;font-size:12px;color:var(--muted);flex-wrap:wrap}
@@ -392,8 +401,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='1.5';
+const APP_VERSION='1.6';
 const CHANGELOG=[
+ ['1.6','11/10/2026',['"Como usar" mais visível: item no menu, cartão de boas-vindas no Painel e botão na tela de entrar.']],
  ['1.5','11/10/2026',['Manual "Como usar" com fotos de todas as telas, aberto pelo botão 📘 Como usar.']],
  ['1.4','11/10/2026',['Dízimos: "Ofertas especiais" para adicionar ofertas diferentes (missões, construção, campanhas), só no mês ou todo mês.']],
  ['1.3','11/10/2026',['Modo escuro como padrão, com botão para trocar entre Claro e Escuro.','E-mail de confirmação enviado só para a conta do desenvolvedor.','Botão de atualização e esta janela de Novidades.']],
@@ -555,8 +565,9 @@ function buildNav(){
  const rail=document.getElementById('rail');
  const brand=rail.querySelector('.brand').outerHTML;
  const btns=VIEWS.filter(([k])=>k!=='admin'||ME.owner).map(([k,l])=>'<button class="navbtn" data-go="'+k+'" aria-current="'+(view===k)+'">'+icon(k)+'<span>'+l+'</span></button>').join('');
- rail.innerHTML=brand+btns+'<div class="foot"><div class="sync"><b></b><span>Salvo neste aparelho</span></div><div style="margin-top:6px">'+mLabel(CUR,true)+'</div><button class="linkbtn" data-act="news" style="margin-top:6px;font-size:11px">Versão '+APP_VERSION+' · novidades</button><a class="linkbtn" href="manual.html" style="display:block;margin-top:6px;font-size:11px">📘 Como usar</a></div>';
- document.getElementById('mnav').innerHTML=btns;
+ const guide='<a class="navbtn guide" href="manual.html">'+icon('estudo')+'<span>Como usar</span></a>';
+ rail.innerHTML=brand+guide+btns+'<div class="foot"><div class="sync"><b></b><span>Salvo neste aparelho</span></div><div style="margin-top:6px">'+mLabel(CUR,true)+'</div><button class="linkbtn" data-act="news" style="margin-top:6px;font-size:11px">Versão '+APP_VERSION+' · novidades</button><a class="linkbtn" href="manual.html" style="display:block;margin-top:6px;font-size:11px">📘 Como usar</a></div>';
+ document.getElementById('mnav').innerHTML=guide+btns;
  setSync(syncState);
 }
 function render(){
@@ -569,7 +580,7 @@ function render(){
  if(view==='admin'&&!ME.owner)view='painel';
  buildNav();
  const v={diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
- const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
+ const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
 }
@@ -590,7 +601,9 @@ function vPainel(){
  const venc=bills(CUR).filter(b=>!b.paid).map(b=>({t:b.name,day:b.day,v:b.val,k:b.kind+(b.to&&b.to!==b.name?' · para '+b.to:'')}))
   .sort((a,b)=>((a.day<d)-(b.day<d))||a.day-b.day).slice(0,6);
  const gaugeCol=comp>0.7?'var(--bad)':comp>0.5?'var(--warn)':'var(--good)';
+ let guideOk=false;try{guideOk=localStorage.getItem('cofre-guia-ok')==='1'}catch(e){}
  return top('Visão geral · '+mLabel(CUR,true),'Seu dinheiro agora','<button class="btn primary" data-act="addTx">'+icon('lanc')+'Novo lançamento</button>')+
+ (guideOk?'':'<section class="card guidecard"><div class="gc-ic">'+icon('estudo')+'</div><div style="min-width:0;flex:1"><h2>Primeira vez aqui?</h2><p class="muted" style="margin:4px 0 0">Veja o passo a passo com fotos de cada tela. Em 10 minutos seu mês fica organizado.</p></div><div class="gc-act"><a class="btn primary" href="manual.html" style="text-decoration:none">📘 Ver passo a passo</a><button class="btn sm ghost" data-act="hideGuide">Já sei usar</button></div></section>')+
  '<div class="grid g32">'+
   '<section class="card hero"><div class="hero-row"><div style="min-width:0">'+(bal!=null?
    '<div class="kpi"><div class="lb">Saldo em conta</div></div><div class="big '+(bal>=0?'':'neg')+'">'+R(bal)+'</div>'+
@@ -995,7 +1008,7 @@ function showShare(){
 /* Login */
 function vLogin(){
  const brand='<div class="brand" style="padding:0 0 18px"><i></i><div>COFRE<small>GESTÃO PESSOAL</small></div></div>';
- const foot='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px"><p class="muted" style="font-size:12.5px;margin:0">Seus dados são privados.</p><span style="display:flex;gap:8px;align-items:center"><a class="linkbtn" href="manual.html" style="font-size:12px">Como usar</a><button class="linkbtn" data-act="news" style="font-size:12px">v'+APP_VERSION+'</button>'+themeBtn()+'</span></div>';
+ const foot='<a class="btn" href="manual.html" style="text-decoration:none;justify-content:center;width:100%;margin-top:16px">📘 Como usar o app</a><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px"><p class="muted" style="font-size:12.5px;margin:0">Seus dados são privados.</p><span style="display:flex;gap:8px;align-items:center"><a class="linkbtn" href="manual.html" style="font-size:12px">Como usar</a><button class="linkbtn" data-act="news" style="font-size:12px">v'+APP_VERSION+'</button>'+themeBtn()+'</span></div>';
  if(!ready)return '<div class="login"><div class="card hero lbox">'+brand+'<h1 style="font-size:24px">Carregando…</h1>'+foot+'</div></div>';
  if(LOCAL_ONLY)return '<div class="login"><div class="card hero lbox">'+brand+'<div class="eyebrow">Acesso</div><h1 style="font-size:28px;margin-bottom:14px">Entrar</h1><div class="who"><div><div style="font-weight:700">Modo local</div><div class="muted" style="font-size:12.5px">Os dados ficam só neste aparelho.</div></div></div><form id="localForm" class="form" style="grid-template-columns:1fr"><button class="btn primary" type="submit" style="justify-content:center;padding:12px">Entrar</button></form>'+foot+'</div></div>';
  const m=authMode,busy='';
@@ -1319,6 +1332,7 @@ document.addEventListener('click',e=>{
  else if(a==='resetBud'){S.budget={};commit('Percentuais padrão restaurados')}
  else if(a==='logout'){closeSheetQuiet();window.scrollTo(0,0);if(AUTH)AUTH.signOut();else{locked=true;render()}}
  else if(a==='news')showNews();
+ else if(a==='hideGuide'){try{localStorage.setItem('cofre-guia-ok','1')}catch(err){}render();toast('O manual continua no menu: 📘 Como usar')}
  else if(a==='doUpdate')doUpdate();
  else if(a==='theme'){setTheme(getTheme()==='dark'?'light':'dark');render()}
  else if(a==='authMode'){authMode=b.dataset.m;render()}
