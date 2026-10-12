@@ -586,11 +586,11 @@ function scnAdj(sc,m){ // ajustes do cenário simulado para o mês m: [entra a m
 }
 function projRows(to,sc){
  const av=avgVarOut();let b=balanceAt(CUR);const hasBal=b!=null;if(!hasBal)b=0;b+=pendingIn(CUR);
- const rows=[];const cx=month(CUR);const a0=scnAdj(sc,CUR);b+=a0[0]-a0[1];
- rows.push({m:CUR,ent:cx.entradas+a0[0],sai:cx.saidas+a0[1],sobra:cx.saldo+a0[0]-a0[1],saldo:b,inFix:cx.inFix,inParc:cx.inParc||0,outFix:cx.outFix,parc:cx.parc,vari:cx.outVar,cur:true});
+ const rows=[];const cx=month(CUR);const a0=scnAdj(sc,CUR);const d0=titheOut(CUR);b+=a0[0]-a0[1]-d0;
+ rows.push({m:CUR,ent:cx.entradas+a0[0],sai:cx.saidas+a0[1]+d0,sobra:cx.saldo+a0[0]-a0[1]-d0,saldo:b,diz:d0,inFix:cx.inFix,inParc:cx.inParc||0,outFix:cx.outFix,parc:cx.parc,vari:cx.outVar,cur:true});
  const vp=sc?1+num(sc.varPct)/100:1;
- for(let m=addM(CUR,1),k=0;diffM(m,to)>=0&&k<120;m=addM(m,1),k++){const x=month(m);const vari=Math.max(x.outVar,av)*vp;const a=scnAdj(sc,m);const ent=x.inFix+x.inVar+a[0],sai=x.outFix+x.parc+vari+a[1];b+=ent-sai;
-  rows.push({m,ent,sai,sobra:ent-sai,saldo:b,inFix:x.inFix,inParc:x.inParc||0,outFix:x.outFix,parc:x.parc,vari})}
+ for(let m=addM(CUR,1),k=0;diffM(m,to)>=0&&k<120;m=addM(m,1),k++){const x=month(m);const vari=Math.max(x.outVar,av)*vp;const a=scnAdj(sc,m);const dz=titheOut(m)+(S.titheProj!==false&&a[0]>0?a[0]*(0.1+num(tithe().offer)/100):0);const ent=x.inFix+x.inVar+a[0],sai=x.outFix+x.parc+vari+a[1]+dz;b+=ent-sai;
+  rows.push({m,ent,sai,sobra:ent-sai,saldo:b,diz:dz,inFix:x.inFix,inParc:x.inParc||0,outFix:x.outFix,parc:x.parc,vari})}
  rows.hasBal=hasBal;return rows;
 }
 let SCN={};try{SCN=JSON.parse(localStorage.getItem('cofre-cenario')||'{}')||{}}catch(e){SCN={}}
@@ -615,11 +615,11 @@ function vProj(){
   '<div class="grid g4" style="margin:14px 0">'+
    kpi('Saldo no fim de '+mLabel(to)+(on?' · hoje':''),R(last.saldo),rows.hasBal?'como está hoje, sem mudanças':'informe o saldo inicial para ficar exato',last.saldo>=0?'pos':'neg')+
    (on?kpi('Com o cenário simulado',R(sl.saldo),(sl.saldo-last.saldo>=0?'+ ':'− ')+R0(Math.abs(sl.saldo-last.saldo))+' em relação a hoje',sl.saldo>=0?'pos':'neg'):kpi('Entra em '+mLabel(to),R(last.ent),last.inParc?'inclui '+R0(last.inParc)+' de entradas parceladas':'salário, entradas fixas e extras','pos'))+
-   kpi('Sai em '+mLabel(to),R((on?sl:last).sai),'fixas '+R0(last.outFix)+' · parcelas '+R0(last.parc)+' · dia a dia ~'+R0(last.vari),'neg')+
+   kpi('Sai em '+mLabel(to),R((on?sl:last).sai),'fixas '+R0(last.outFix)+' · parcelas '+R0(last.parc)+' · dia a dia ~'+R0(last.vari)+(last.diz?' · dízimo/oferta '+R0(last.diz):''),'neg')+
    kpi('Menor saldo no caminho',R(low.saldo),'em '+mLabel(low.m)+(low.saldo<0?' · vai ficar negativo!':''),low.saldo<0?'neg':'')+'</div>'+
   '<div style="overflow:auto;max-height:360px"><table class="ptab"><thead><tr><th>Mês</th><th>Entra</th><th>Sai</th><th>Sobra</th><th>Saldo no fim</th>'+(on?'<th>Simulado</th>':'')+'</tr></thead><tbody>'+
    rows.map((r,i)=>'<tr'+(r.cur?' class="cur"':'')+'><td>'+mLabel(r.m)+(r.cur?' <span class="muted">(atual)</span>':'')+'</td><td class="pos">'+R0(on?srows[i].ent:r.ent)+'</td><td class="neg">'+R0(on?srows[i].sai:r.sai)+'</td><td class="'+((on?srows[i]:r).sobra>=0?'pos':'neg')+'">'+R0((on?srows[i]:r).sobra)+'</td><td class="'+(r.saldo>=0?'':'neg')+'"><b>'+R0(r.saldo)+'</b></td>'+(on?'<td class="'+(srows[i].saldo>=0?'pos':'neg')+'"><b>'+R0(srows[i].saldo)+'</b></td>':'')+'</tr>').join('')+'</tbody></table></div>'+
-  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Entra = salário, fixas, parceladas, trabalho (13º, férias, acordos) e avulsas lançadas. Sai = contas fixas + parcelas + média dos gastos do dia a dia (últimos 3 meses). '+(on?'Com cenário: entradas/saídas da tabela já incluem a simulação; a coluna "Saldo no fim" é sem mudanças.':'')+'</p>'+
+  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Entra = salário, fixas, parceladas, trabalho (13º, férias, acordos) e avulsas lançadas. Sai = contas fixas + parcelas + média dos gastos do dia a dia (últimos 3 meses)'+(S.titheProj===false?'. Dízimo fora da projeção — <a href="#" data-act="togTitheProj" style="color:var(--accent)">incluir dízimo</a>. ':' + <b>dízimo e ofertas</b> (sobre todas as entradas, inclusive 13º e férias) — <a href="#" data-act="togTitheProj" style="color:var(--accent)">tirar da projeção</a>. ')+(on?'Com cenário: entradas/saídas da tabela já incluem a simulação; a coluna "Saldo no fim" é sem mudanças.':'')+'</p>'+
   (nx.length?'<details class="billd" style="margin-top:14px"><summary style="cursor:pointer"><b>Previsto para entrar em '+mLabel(addM(CUR,1),true)+'</b> · <span class="mono">'+R0(nx.reduce((a,r)=>a+r.val,0))+'</span></summary><div class="items">'+nx.map(r=>'<div><span>'+String(r.day).padStart(2,'0')+' · '+esc(r.name)+' <small class="muted">'+esc(r.kind)+'</small></span><span class="mono">'+R(r.val)+'</span></div>').join('')+'</div></details>':'')+
   '</section>';
 }
@@ -636,11 +636,10 @@ function workToDec(){
 }
 function vResumo(){
  const x=month(CUR),bal=balanceAt(CUR),pend=pendingIn(CUR),av=avgVarOut(),varRest=Math.max(0,av-x.outVar);
- let usesT=false;try{const T=tithe();usesT=Object.keys(T.pr||{}).length>0||Object.keys(T.rows||{}).length>0}catch(e){}
- const tc=titheCalc(CUR),titPend=usesT?Math.max(0,tc.total-tc.paidVal):0;
+ const usesT=S.titheProj!==false;const tc=titheCalc(CUR),titPend=titheOut(CUR);
  const b0=bal==null?0:bal,fimMes=b0+pend-varRest-titPend;
- const dec=CUR.slice(5)==='12'?addM(CUR,12):CUR.slice(0,4)+'-12';const ry=projRows(dec);let titFut=0;if(usesT)for(let m=addM(CUR,1);diffM(m,dec)>=0;m=addM(m,1))titFut+=titheCalc(m).total;
- const fimAno=ry[ry.length-1].saldo-varRest-titPend-titFut;
+ const dec=CUR.slice(5)==='12'?addM(CUR,12):CUR.slice(0,4)+'-12';const ry=projRows(dec);let titFut=0;for(let m=addM(CUR,1);diffM(m,dec)>=0;m=addM(m,1))titFut+=titheOut(m);
+ const fimAno=ry[ry.length-1].saldo-varRest;
  const r12=projRows(addM(CUR,12));const neg=r12.find(r=>r.saldo<0);
  const bl=bills(CUR),unpaid=bl.filter(b=>!b.paid),late=unpaid.filter(b=>b.day<TODAY.getDate());
  const act=S.inst.filter(i=>instStatus(i).rem>0),debt=act.reduce((a,i)=>a+instStatus(i).remVal,0),df=debtFree();
@@ -662,7 +661,7 @@ function vResumo(){
  return '<section class="card resumo"><div class="hd"><h2>🧭 Resumo geral</h2><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip acc">cruzando todos os seus dados</span><button class="btn sm primary" data-act="goProj">🔮 Projeção e simulação</button></div></div>'+
   '<div class="rtiles">'+tile('Hoje em conta',bal==null?'—':R(bal),bal==null?'informe o saldo inicial':'saldo atual',bal!=null&&bal<0?'neg':'')+
    tile('Fim de '+mLabel(CUR),R(fimMes),'+ a receber '+R0(pend)+(varRest?' − gastos do dia a dia ~'+R0(varRest):'')+(titPend?' − dízimo/oferta '+R0(titPend):''),fimMes>=0?'pos':'neg')+
-   tile('Fim de '+mLabel(dec),R(fimAno),'projeção com tudo: renda, trabalho, contas, parcelas'+(usesT?', dízimo':''),fimAno>=0?'pos':'neg')+'</div>'+
+   tile('Fim de '+mLabel(dec),R(fimAno),'renda, trabalho, contas, parcelas'+(usesT?' e dízimo/ofertas ('+R0(titPend+titFut)+' até lá)':''),fimAno>=0?'pos':'neg')+'</div>'+
   '<p class="rconcl">'+concl+'</p>'+
   (al.length?'<div class="ralerts">'+al.map(a=>'<div class="insight"'+(a[2]?' data-go="'+a[2]+'" style="cursor:pointer"':'')+'><span class="dot" style="background:var(--'+(a[0]==='warn'?'warn':'bad')+')"></span><div>'+a[1]+'</div></div>').join('')+'</div>':'<div class="insight"><span class="dot" style="background:var(--good)"></span><div>Nenhum alerta: contas em dia e sem saldo negativo previsto nos próximos 12 meses. 👏</div></div>')+
   '<div class="rgrid">'+
@@ -671,7 +670,7 @@ function vResumo(){
    li('💳','Parcelas: falta pagar',R0(debt)+(df?' · livre em '+mLabel(df):''),debt?'neg':'','parc')+
    (inRem?li('📥','Parcelas a receber',R0(inRem),'pos','parc'):'')+
    (wk!=null?li('💼','Trabalho até dezembro',R0(wk),'pos','trab'):'')+
-   (usesT||tc.total?li('🙏','Dízimo e oferta do mês',R0(tc.total)+(!usesT?' sugerido':titPend?' · falta '+R0(titPend):' · em dia'),'','diz'):'')+
+   (tc.total?li('🙏','Dízimo e oferta do mês',R0(tc.total)+(titPend?' · falta devolver '+R0(titPend):' · em dia'),'','diz'):'')+
    li('📊','Orçamento do mês',over.length?over.length+' estourada'+(over.length>1?'s':''):'dentro do limite',over.length?'neg':'pos','orc')+
    (goals.length?li('🎯','Metas',goals.length+' meta'+(goals.length>1?'s':'')+(gNext?' · próxima em '+dur(gNext[1]):''),'','metas'):'')+
    li('📈','Sobra média prevista',R0(projSobra(addM(CUR,1)))+'/mês',projSobra(addM(CUR,1))>=0?'pos':'neg','')+
@@ -744,8 +743,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.12';
+const APP_VERSION='2.13';
 const CHANGELOG=[
+ ['2.13','12/10/2026',['Dízimo e ofertas entram em todas as projeções (resumo, fim do mês, fim do ano, simulação, sobra prevista e metas).','Dízimo calculado também sobre 13º, férias e pagamentos do acordo informal/CLT.']],
  ['2.12','12/10/2026',['Painel: 🧭 Resumo geral cruzando tudo (saldo hoje, fim do mês, fim do ano, contas, parcelas, trabalho, dízimo, orçamento, metas e alertas).','🔮 Projeção e simulação no topo do Painel: escolha a data e simule cenários (renda a mais/menos, gastos, compra à vista ou parcelada) comparando com hoje.']],
  ['2.11','12/10/2026',['Botão 👁️ Esconder saldo: esconde todos os valores do app (fica lembrado neste aparelho).']],
  ['2.10','12/10/2026',['Acordo informal: opção "Abri mão do FGTS" — o FGTS sai do balanço e da comparação com a CLT.']],
@@ -910,8 +910,11 @@ function avgVarOut(){
  const ms=[0,-1,-2].map(k=>addM(CUR,k)).map(month).filter(x=>x.outVar>0);
  return ms.length?ms.reduce((a,x)=>a+x.outVar,0)/ms.length:0;
 }
-function projSobra(m){const x=month(m);return x.inFix-x.outFix-x.parc-avgVarOut()}
-function projection(n){const out=[];for(let k=0;k<n;k++){const m=addM(CUR,k);const x=month(m);out.push({m,parc:x.parc,sobra:x.inFix-x.outFix-x.parc-avgVarOut()})}return out}
+function titheOut(m){ // dízimo + ofertas previstos no mês (no mês atual: só o que falta devolver)
+ if(S.titheProj===false)return 0;const t=titheCalc(m);return diffM(CUR,m)<=0?Math.max(0,t.total-t.paidVal):t.total;
+}
+function projSobra(m){const x=month(m);return x.inFix-x.outFix-x.parc-avgVarOut()-titheOut(m)}
+function projection(n){const out=[];for(let k=0;k<n;k++){const m=addM(CUR,k);const x=month(m);out.push({m,parc:x.parc,sobra:x.inFix-x.outFix-x.parc-avgVarOut()-titheOut(m)})}return out}
 function debtFree(){let last=null;S.inst.forEach(i=>{const e=addM(i.first,i.n-1);if(diffM(CUR,e)>=0&&(!last||diffM(last,e)>0))last=e});return last}
 function goalMonths(g){
  let saved=num(g.saved);const target=num(g.target),r=num(g.rate)/100;
@@ -1427,6 +1430,7 @@ function titheRows(m){
  const T=tithe(),ov=T.rows[m]||{},pr=T.pr[m]||{};const src=[];
  S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>src.push({key:'rec-'+r.id,desc:r.desc,cat:r.cat,val:num(r.val),fixa:true}));
  (S.instIn||[]).filter(i=>inInMonth(i,m)).forEach(i=>src.push({key:'ini-'+i.id,desc:i.desc+' ('+(diffM(i.first,m)+1)+'/'+i.n+')',cat:i.cat,val:inParcel(i),fixa:true}));
+ extraIn(m).filter(r=>r.val>0).forEach(r=>src.push({key:'ex-'+r.key.split(':').slice(1).join(':'),desc:r.name+(r.kind&&r.kind!==r.name?' · '+r.kind:''),cat:'Trabalho',val:r.val,fixa:true}));
  S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m).forEach(t=>src.push({key:'tx-'+t.id,desc:t.desc,cat:t.cat,val:num(t.val),fixa:false}));
  return src.map(s=>{const o=ov[s.key]||{};
   const dAuto=s.val*0.10,oAuto=s.val*num(T.offer)/100;
@@ -2090,6 +2094,7 @@ document.addEventListener('click',e=>{
  else if(a==='goProj'){if(view!=='painel'){view='painel';render()}setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({behavior:'smooth',block:'start'})},40)}
  else if(a==='projQ'){projMonth=b.dataset.v;render();setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},20)}
  else if(a==='scnClear'){SCN={};saveScn();render();setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},20);toast('Cenário limpo')}
+ else if(a==='togTitheProj'){e.preventDefault();S.titheProj=S.titheProj===false;S.demo=false;commit(S.titheProj?'Dízimo incluído nas projeções':'Dízimo fora das projeções');setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},30)}
  else if(a==='eye'){HIDE=!HIDE;try{localStorage.setItem('cofre-ocultar',HIDE?'1':'0')}catch(e){}render();toast(HIDE?'Valores escondidos':'Valores visíveis')}
  else if(a==='addInIn')formInIn();
  else if(a==='editClt')formClt();
