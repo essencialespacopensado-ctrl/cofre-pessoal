@@ -396,30 +396,36 @@ function demo(){
 /* entradas do mês com dia: recebida (dia já passou ou marcou "Recebi") ou prevista */
 function receipts(m){
  const out=[],td=TODAY.getDate(),g=S.got||{};
- S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>out.push({key:m+':rin:'+r.id,kind:'Entrada fixa',name:r.desc,from:r.from||'',day:r.day||1,val:num(r.val)}));
+ S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>out.push({key:m+':rin:'+r.id,kind:'Entrada fixa',name:r.desc,from:r.from||'',day:r.day||1,val:num(r.val),rec:1}));
  (S.instIn||[]).filter(i=>inInMonth(i,m)).forEach(i=>out.push({key:m+':ini:'+i.id,kind:'Entrada parcelada '+(diffM(i.first,m)+1)+'/'+i.n,name:i.desc,from:i.from||'',day:i.day||10,val:inParcel(i)}));
  extraIn(m).forEach(r=>out.push(r));
  S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m).forEach(t=>out.push({key:'tx:'+t.id,kind:'Entrada avulsa',name:t.desc,from:'',day:+t.date.slice(8,10)||1,val:num(t.val),tx:true}));
- out.forEach(r=>{const d=diffM(m,CUR);r.auto=d>0||(d===0&&r.day<=td);r.got=g[r.key]!=null?!!g[r.key]:r.auto});
+ out.forEach(r=>{const d=diffM(m,CUR);r.settled=isSettled(m,r.day,!!(r.rec||(r.work&&r.key.indexOf(':acd:')<0)));r.auto=d>0||(d===0&&r.day<=td);r.got=r.settled||(g[r.key]!=null?!!g[r.key]:r.auto)});
  return out.sort((a,b)=>a.day-b.day);
+}
+function isSettled(m,day,recurring){ // já está dentro do saldo informado (início do uso do app)
+ const i=S.initial;if(!i||!i.month)return false;const d=diffM(i.month,m);
+ if(d<0)return true;if(d>0)return false;
+ if(num(day)<=num(i.day))return true;
+ return !!(recurring&&i.settled);
 }
 function iniDay(m){const i=S.initial;return i&&i.month===m?num(i.day):0} // itens até esse dia já estão dentro do saldo informado
 function outItems(m){ // tudo que sai do caixa no mês m, item a item (bate com month().saidas)
- const L=bills(m).map(b=>({name:b.name,kind:b.kind,day:b.day,val:b.val,done:!!b.paid}));
- S.tx.filter(t=>t.type==='out'&&t.date&&!cardById(t.cardId)&&t.date.slice(0,7)===m).forEach(t=>L.push({name:t.desc,kind:'Gasto lançado',day:+t.date.slice(8,10)||1,val:num(t.val),done:true}));
- extraOut(m).forEach(r=>L.push({name:r.name,kind:r.kind,day:r.day,val:r.val,done:diffM(m,CUR)>0||(m===CUR&&r.day<=TODAY.getDate())}));
+ const L=bills(m).map(b=>({name:b.name,kind:b.kind,day:b.day,val:b.val,done:!!b.paid,settled:b.settled}));
+ S.tx.filter(t=>t.type==='out'&&t.date&&!cardById(t.cardId)&&t.date.slice(0,7)===m).forEach(t=>{const dd=+t.date.slice(8,10)||1;L.push({name:t.desc,kind:'Gasto lançado',day:dd,val:num(t.val),done:true,settled:isSettled(m,dd,false)})});
+ extraOut(m).forEach(r=>L.push({name:r.name,kind:r.kind,day:r.day,settled:isSettled(m,r.day,false),val:r.val,done:diffM(m,CUR)>0||(m===CUR&&r.day<=TODAY.getDate())}));
  return L;
 }
 function pendingIn(m){const d=iniDay(m);return receipts(m).filter(r=>!r.got&&r.day>d).reduce((a,r)=>a+r.val,0)}
 function pendingOut(m){const d=iniDay(m);return bills(m).filter(b=>!b.paid&&b.day>d).reduce((a,b)=>a+b.val,0)} // contas/faturas do mês ainda não pagas
-function varRestOf(){return Math.max(0,avgVarOut()-month(CUR).outDia)}
+function varRestOf(){const i=S.initial;let base=Math.max(0,avgVarOut()-month(CUR).outDia);if(i&&i.month===CUR&&num(i.day)){const dim=new Date(+CUR.slice(0,4),+CUR.slice(5,7),0).getDate();base=Math.max(0,avgVarOut()*(dim-num(i.day))/dim-S.tx.filter(t=>t.type==='out'&&t.date&&t.date.slice(0,7)===CUR&&+t.date.slice(8,10)>num(i.day)&&!isDizTx(t)&&!isGoalTx(t)).reduce((a,t)=>a+num(t.val),0))}return base}
 function balanceAt(m){
  const ini=S.initial;if(!ini||!ini.month)return null;
  if(diffM(ini.month,m)<0)return num(ini.val);
  let b=num(ini.val);for(let k=ini.month;diffM(k,m)>=0;k=addM(k,1)){const d=iniDay(k),cur=k===CUR;
-  if(!d&&!cur){b+=month(k).saldo;continue}
-  receipts(k).forEach(r=>{if(r.day>d&&(!cur||r.got))b+=r.val});
-  outItems(k).forEach(o=>{if(o.day>d&&(!cur||o.done))b-=o.val});
+  if(!d&&!cur&&!(S.initial.settled&&k===ini.month)){b+=month(k).saldo;continue}
+  receipts(k).forEach(r=>{if(!r.settled&&r.day>d&&(!cur||r.got))b+=r.val});
+  outItems(k).forEach(o=>{if(!o.settled&&o.day>d&&(!cur||o.done))b-=o.val});
  }
  return b; // mês do saldo informado: só o que veio depois daquele dia; mês atual: só o que já entrou e já foi pago
 }
@@ -600,13 +606,13 @@ function expGroup(title,list,cls){const t=list.reduce((a,x)=>a+x[1],0);return '<
 function explainMonth(m,sc){
  const cur=m===CUR,x=month(m),av=avgVarOut(),dd=d=>String(d).padStart(2,'0')+'/'+m.slice(5,7);
  // entradas
- const ent=receipts(m).map(r=>[esc(r.name),r.val,r.kind+' · dia '+dd(r.day)+(cur?(r.got?' · já recebido':' · ainda vai entrar'):''),r.val<0?'neg':'pos']);
+ const ent=receipts(m).filter(r=>!r.settled).map(r=>[esc(r.name),r.val,r.kind+' · dia '+dd(r.day)+(cur?(r.got?' · já recebido':' · ainda vai entrar'):''),r.val<0?'neg':'pos']);
  const a=scnAdj(sc,m);if(a[0])ent.push(['Cenário simulado',a[0],'renda a mais/menos ou dinheiro extra da simulação',a[0]<0?'neg':'pos']);
  // saídas
- const fix=S.rec.filter(r=>r.type==='out'&&recActive(r,m)).map(r=>{const c=cardById(r.cardId);return [esc(r.desc),num(r.val),'conta fixa · dia '+dd(r.day||1)+(c?' · no cartão '+esc(c.name):'')+(cur&&(S.paid||{})[m+':'+(c?'card:'+c.id:'rec:'+r.id)]?' · paga':'')]});
- extraOut(m).forEach(r=>fix.push([esc(r.name),r.val,r.kind]));
- const par=S.inst.filter(i=>instInMonth(i,m)).map(i=>{const c=cardById(i.cardId);return [esc(i.desc)+' ('+(diffM(i.first,m)+1)+'/'+i.n+')',instParcel(i),'parcela · dia '+dd(i.day||10)+(c?' · no cartão '+esc(c.name):'')]});
- const lanc=S.tx.filter(t=>t.type==='out'&&t.date&&txCashMonth(t)===m).map(t=>{const c=cardById(t.cardId);return [esc(t.desc),num(t.val),(isDizTx(t)?'dízimo/oferta já devolvido':isGoalTx(t)?'guardado em meta':'gasto lançado')+' em '+t.date.slice(8,10)+'/'+t.date.slice(5,7)+(c&&t.date.slice(0,7)!==m?' · cartão, cai na fatura deste mês':'')]});
+ const fix=S.rec.filter(r=>r.type==='out'&&recActive(r,m)&&!isSettled(m,r.day||1,true)).map(r=>{const c=cardById(r.cardId);return [esc(r.desc),num(r.val),'conta fixa · dia '+dd(r.day||1)+(c?' · no cartão '+esc(c.name):'')+(cur&&(S.paid||{})[m+':'+(c?'card:'+c.id:'rec:'+r.id)]?' · paga':'')]});
+ extraOut(m).filter(r=>!isSettled(m,r.day,false)).forEach(r=>fix.push([esc(r.name),r.val,r.kind]));
+ const par=S.inst.filter(i=>instInMonth(i,m)&&!isSettled(m,i.day||10,true)).map(i=>{const c=cardById(i.cardId);return [esc(i.desc)+' ('+(diffM(i.first,m)+1)+'/'+i.n+')',instParcel(i),'parcela · dia '+dd(i.day||10)+(c?' · no cartão '+esc(c.name):'')]});
+ const lanc=S.tx.filter(t=>t.type==='out'&&t.date&&txCashMonth(t)===m&&!(cardById(t.cardId)?isSettled(m,cardById(t.cardId).due,true):isSettled(m,+t.date.slice(8,10)||1,false))).map(t=>{const c=cardById(t.cardId);return [esc(t.desc),num(t.val),(isDizTx(t)?'dízimo/oferta já devolvido':isGoalTx(t)?'guardado em meta':'gasto lançado')+' em '+t.date.slice(8,10)+'/'+t.date.slice(5,7)+(c&&t.date.slice(0,7)!==m?' · cartão, cai na fatura deste mês':'')]});
  const dia=[];const vp=sc?1+num(sc.varPct)/100:1;
  if(cur){const vr=varRestOf();if(vr>0)dia.push(['Estimativa do que ainda vai gastar no dia a dia',vr,'média dos últimos 3 meses ('+R0(av)+') − o que já lançou neste mês ('+R0(x.outDia)+')'])}
  else{const v=Math.max(x.outDia,av)*vp,est=v-x.outDia;if(est>0.005)dia.push(['Estimativa de gastos do dia a dia',est,(av>0?'média dos seus gastos avulsos dos últimos 3 meses completos: '+R0(av):'nenhum gasto avulso nos últimos meses')+(x.outDia?' (já lançado para este mês: '+R0(x.outDia)+')':'')+(sc&&num(sc.varPct)?' · cenário '+(num(sc.varPct)>0?'+':'')+num(sc.varPct)+'%':'')])}
@@ -762,7 +768,8 @@ function scnAdj(sc,m){ // ajustes do cenário simulado para o mês m: [entra a m
 function projRows(to,sc){
  const av=avgVarOut();let b=balanceAt(CUR);const hasBal=b!=null;if(!hasBal)b=0;const vr=varRestOf();b+=pendingIn(CUR)-pendingOut(CUR)-vr;
  const rows=[];const cx=month(CUR);const a0=scnAdj(sc,CUR);const d0=titheOut(CUR);b+=a0[0]-a0[1]-d0;
- rows.push({m:CUR,ent:cx.entradas+a0[0],sai:cx.saidas+vr+a0[1]+d0,sobra:cx.saldo-vr+a0[0]-a0[1]-d0,saldo:b,diz:d0,inFix:cx.inFix,inParc:cx.inParc||0,outFix:cx.outFix,parc:cx.parc,vari:cx.outDia+vr,cur:true});
+ const eC=receipts(CUR).filter(r=>!r.settled).reduce((q,r)=>q+r.val,0)+a0[0],sC=outItems(CUR).filter(o=>!o.settled).reduce((q,o)=>q+o.val,0)+vr+a0[1]+d0;
+ rows.push({m:CUR,ent:eC,sai:sC,sobra:eC-sC,saldo:b,diz:d0,inFix:cx.inFix,inParc:cx.inParc||0,outFix:cx.outFix,parc:cx.parc,vari:cx.outDia+vr,cur:true});
  const vp=sc?1+num(sc.varPct)/100:1;
  for(let m=addM(CUR,1),k=0;diffM(m,to)>=0&&k<120;m=addM(m,1),k++){const x=month(m);const vari=Math.max(x.outDia,av)*vp;const a=scnAdj(sc,m);const dz=titheOut(m)+(S.titheProj!==false&&a[0]>0?a[0]*(0.1+num(tithe().offer)/100):0);const ent=x.inFix+x.inVar+a[0],sai=x.outFix+x.parc+vari+(x.outVar-x.outDia)+a[1]+dz;b+=ent-sai;
   rows.push({m,ent,sai,sobra:ent-sai,saldo:b,diz:dz,inFix:x.inFix,inParc:x.inParc||0,outFix:x.outFix,parc:x.parc,vari})}
@@ -878,7 +885,7 @@ function bills(m){
  });
  S.rec.filter(r=>r.type==='out'&&!cardById(r.cardId)&&recActive(r,m)).forEach(r=>out.push({key:m+':rec:'+r.id,kind:'Conta fixa',name:r.desc,to:r.to||'',day:r.day||1,val:num(r.val)}));
  S.inst.filter(i=>!cardById(i.cardId)&&instInMonth(i,m)).forEach(i=>out.push({key:m+':inst:'+i.id,kind:'Parcela '+(diffM(i.first,m)+1)+'/'+i.n,name:i.desc,to:i.to||'',day:i.day||10,val:instParcel(i)}));
- out.forEach(b=>b.paid=!!(S.paid||{})[b.key]);
+ out.forEach(b=>{b.settled=isSettled(m,b.day,true);b.paid=b.settled||!!(S.paid||{})[b.key]});
  return out.sort((a,b)=>a.day-b.day);
 }
 function budPct(c){const b=S.budget||{};if(b[c]!=null)return num(b[c]);const d=catDef(c);if(d)return num(d.pct);return BUDGET[c]?BUDGET[c][0]:0}
@@ -919,8 +926,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.24';
+const APP_VERSION='2.25';
 const CHANGELOG=[
+ ['2.25','12/10/2026',['A data do saldo informado é o início do app: nada antes dela gera dízimo devido, conta atrasada ou "a receber".','Opção "neste mês já recebi e já paguei tudo": salário, contas fixas, parcelas e faturas do mês de início contam como resolvidos; só entram avulsos e combinados depois (ex.: entrada parcelada).']],
  ['2.24','12/10/2026',['Saldo em conta: agora você informa o saldo de HOJE (com a data). O que entrou/saiu até essa data não é somado de novo — evita contar o salário duas vezes.','Toque no saldo para ver cada entrada e saída que foi contada no mês, e quais entraram automaticamente porque o dia já passou.']],
  ['2.23','12/10/2026',['Trabalho: 👥 Pessoas da família — adicionar, renomear e excluir pessoas; escolher a pessoa numa lista ao cadastrar a renda.']],
  ['2.22','12/10/2026',['Aba Trabalho agora reúne as rendas da família: cada pessoa com seus trabalhos (salário fixo ou acordo informal) e o total da família no topo.','Salários que estavam em Fixas foram movidos para Trabalho (sem duplicar com o acordo).']],
@@ -1633,10 +1641,11 @@ let dizMonth=CUR;
 function tithe(){S.tithe=S.tithe||{offer:5};const T=S.tithe;T.rows=T.rows||{};T.pr=T.pr||{};if(T.offer==null)T.offer=5;return T}
 function titheRows(m){
  const T=tithe(),ov=T.rows[m]||{},pr=T.pr[m]||{};const src=[];
- S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>src.push({key:'rec-'+r.id,desc:r.desc,cat:r.cat,val:num(r.val),fixa:true}));
- (S.instIn||[]).filter(i=>inInMonth(i,m)).forEach(i=>src.push({key:'ini-'+i.id,desc:i.desc+' ('+(diffM(i.first,m)+1)+'/'+i.n+')',cat:i.cat,val:inParcel(i),fixa:true}));
- extraIn(m).filter(r=>r.val>0).forEach(r=>src.push({key:'ex-'+r.key.split(':').slice(1).join(':'),desc:r.name+(r.kind&&r.kind!==r.name?' · '+r.kind:''),cat:'Trabalho',val:r.val,fixa:true}));
- S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m).forEach(t=>src.push({key:'tx-'+t.id,desc:t.desc,cat:t.cat,val:num(t.val),fixa:false}));
+ if(S.initial&&S.initial.month&&diffM(S.initial.month,m)<0)return [];
+ S.rec.filter(r=>r.type==='in'&&recActive(r,m)&&!isSettled(m,r.day||1,true)).forEach(r=>src.push({key:'rec-'+r.id,desc:r.desc,cat:r.cat,val:num(r.val),fixa:true}));
+ (S.instIn||[]).filter(i=>inInMonth(i,m)&&!isSettled(m,i.day||10,false)).forEach(i=>src.push({key:'ini-'+i.id,desc:i.desc+' ('+(diffM(i.first,m)+1)+'/'+i.n+')',cat:i.cat,val:inParcel(i),fixa:true}));
+extraIn(m).filter(r=>r.val>0&&!isSettled(m,r.day,r.key.indexOf(':acd:')<0)).forEach(r=>src.push({key:'ex-'+r.key.split(':').slice(1).join(':'),desc:r.name+(r.kind&&r.kind!==r.name?' · '+r.kind:''),cat:'Trabalho',val:r.val,fixa:true}));
+ S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m&&!isSettled(m,+t.date.slice(8,10)||1,false)).forEach(t=>src.push({key:'tx-'+t.id,desc:t.desc,cat:t.cat,val:num(t.val),fixa:false}));
  return src.map(s=>{const o=ov[s.key]||{};
   const dAuto=s.val*0.10,oAuto=s.val*num(T.offer)/100;
   return {...s,inc:!o.off,d:o.d!=null?num(o.d):dAuto,o:o.o!=null?num(o.o):oAuto,edited:o.d!=null||o.o!=null,paid:pr[s.key]||null};
@@ -2350,9 +2359,10 @@ function formInit(){
  openSheet('Saldo em conta','<div class="form">'+
   '<label class="f">Quanto tem na conta (R$)<input name="val" type="number" inputmode="decimal" step="0.01" value="'+(i.val===''?'':i.val)+'" placeholder="Ex.: 2500"></label>'+
   '<label class="f">Esse era o saldo no dia<input name="date" type="date" value="'+(S.initial?(i.day?i.month+'-'+String(i.day).padStart(2,'0'):i.month+'-01'):todayISO())+'"></label>'+
-  '<p class="muted full" style="margin:0;font-size:12.5px">Olhe o saldo no banco <b>hoje</b> (some todas as contas e a carteira) e deixe a data de hoje. Tudo o que entrou ou saiu <b>até esse dia</b> já está dentro desse valor — o app só soma e tira o que vier <b>depois</b>. Pode ser negativo se estiver no cheque especial.</p></div>',f=>{
+  '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="settled" type="checkbox" style="width:auto"'+(S.initial?(S.initial.settled?' checked':''):' checked')+'> Neste mês já recebi meu salário e já paguei as contas fixas, parcelas e faturas (tudo já está dentro desse saldo)</label>'+
+  '<p class="muted full" style="margin:0;font-size:12.5px">Olhe o saldo no banco <b>hoje</b> (some todas as contas e a carteira) e deixe a data de hoje. Essa data é o <b>início</b> do app: nada antes dela vira cobrança, dízimo devido ou atraso. Tudo o que entrou ou saiu <b>até esse dia</b> já está dentro desse valor — o app só soma e tira o que vier <b>depois</b>. Pode ser negativo se estiver no cheque especial.</p></div>',f=>{
   if(f.val.value===''){f.val.focus();toast('Preencha o valor');return false}
-  const d=f.date.value||todayISO();S.initial={val:num(f.val.value),month:d.slice(0,7),day:+d.slice(8,10)};S.demo=false;commit('Saldo salvo');});
+  const d=f.date.value||todayISO();S.initial={val:num(f.val.value),month:d.slice(0,7),day:+d.slice(8,10),settled:f.settled.checked};S.demo=false;commit('Saldo salvo');});
 }
 function formGoal(g){
  g=g||{name:'',target:'',saved:0,mode:'auto',monthly:300,rate:0.8};
