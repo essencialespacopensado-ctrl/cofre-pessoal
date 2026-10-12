@@ -1,7 +1,7 @@
 {
   "name": "Cofre Pessoal",
   "short_name": "Cofre",
-  "description": "Gestão financeira pessoal: lançamentos, contas, orçamento, metas e dízimos.",
+  "description": "Organize seu dinheiro: gastos, contas, parcelas, metas e orçamento.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

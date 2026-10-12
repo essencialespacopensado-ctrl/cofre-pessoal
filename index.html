@@ -5,7 +5,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#070b14">
-<meta name="description" content="Cofre Pessoal: gestão financeira pessoal, dízimos, metas e orçamento.">
+<meta name="description" content="Organize seu dinheiro: gastos, contas a pagar, parcelas, metas e orçamento em um só lugar. Seus dados são privados.">
+<meta property="og:title" content="Cofre Pessoal">
+<meta property="og:description" content="Organize seu dinheiro: gastos, contas a pagar, parcelas, metas e orçamento em um só lugar. Seus dados são privados.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://cofre-pessoal.onrender.com/icon-512.png">
 <link rel="manifest" href="manifest.json">
 <script>(function(){var t="dark";try{t=localStorage.getItem("cofre-tema")||"dark"}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
 <link rel="icon" href="icon-192.png">
@@ -452,8 +456,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.2';
+const APP_VERSION='2.3';
 const CHANGELOG=[
+ ['2.3','12/10/2026',['Resumo do link compartilhado atualizado (sem dízimo).']],
  ['2.2','12/10/2026',['Entradas previstas: salário, entradas fixas e parceladas só entram no saldo em conta no dia delas. Até lá aparecem como "A receber" (aba A pagar e Painel), com botão Recebi.']],
  ['2.1','11/10/2026',['Entradas parceladas: cadastre dinheiro que vai receber em parcelas (aba Parcelados). Cada parcela entra sozinha na renda do mês, na previsão e no dízimo.']],
  ['2.0','11/10/2026',['Assistente "Pergunte qualquer coisa": leva até a tela certa e abre o formulário, responde com os seus números (saldo, gastos, parcelas, dízimo, vencimentos, metas) e pesquisa na internet.']],
