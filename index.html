@@ -267,6 +267,9 @@ svg text{font-family:var(--f-mono)}
 .scgs{margin-top:10px}.scg{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;align-items:end;padding:10px 0;border-top:1px solid var(--line)}.sct{font-weight:700;font-size:14px;align-self:center}.sct small{display:block;font-weight:400;color:var(--muted);font-size:12px}.scf{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.scf .f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}@media(max-width:700px){.scg{grid-template-columns:1fr}.scf{grid-template-columns:1fr 1fr}}
 .scn{border:1px dashed var(--line);border-radius:12px;padding:10px 12px}.scn summary{cursor:pointer}.scn input{width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:inherit}
 @media(max-width:700px){.rtiles{grid-template-columns:1fr}.rgrid{grid-template-columns:1fr}.rrow .rt{font-size:13px}.rrow .rv{font-size:12.5px;max-width:58vw}.rtile .vl{font-size:22px}}
+.xclick{cursor:pointer}.xclick:hover{color:var(--accent)}tr.xclick:hover td{background:color-mix(in srgb,var(--accent) 7%,transparent)}.rtile.xclick:hover{border-color:var(--accent)}
+.xbox{max-width:640px}.xsum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 12px}.xsum div{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px}.xsum small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.1em}.xsum b{font-size:18px}
+.xgrp{border-top:1px solid var(--line);padding:10px 0}.xhd{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}.xrow{display:flex;justify-content:space-between;gap:12px;padding:5px 0 5px 10px;font-size:13.5px;border-left:2px solid var(--line)}.xrow small{display:block;color:var(--muted);font-size:12px}.xrow b{white-space:nowrap}.pos{color:var(--good)}.neg{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -576,6 +579,56 @@ function balHTML(j){
  return '<details class="billd" open style="margin-top:6px"><summary style="cursor:pointer;font-size:14px"><b>⚖️ Balanço desde '+dBR(jobStartD(j))+'</b> · '+(b.falta>0.5?'<span class="neg">falta receber '+R(b.falta)+'</span>':'<span class="pos">13º e férias em dia</span>')+'</summary><div class="items">'+h+
   '<div class="muted" style="font-size:12px">Referência: regras da CLT com o salário atual de '+R0(j.val)+'. Serve para você saber e negociar; não é orientação jurídica.</div></div></details>';
 }
+
+/* ===== Explicar números: de onde vem cada valor ===== */
+function expLines(list){return list.length?list.map(x=>'<div class="xrow"><span>'+x[0]+(x[2]?'<small>'+x[2]+'</small>':'')+'</span><b class="mono '+(x[3]||'')+'">'+R(x[1])+'</b></div>').join(''):'<div class="muted" style="font-size:13px;padding:6px 0">Nada.</div>'}
+function expGroup(title,list,cls){const t=list.reduce((a,x)=>a+x[1],0);return '<div class="xgrp"><div class="xhd"><b>'+title+'</b><b class="mono '+(cls||'')+'">'+R(t)+'</b></div>'+expLines(list)+'</div>'}
+function explainMonth(m,sc){
+ const cur=m===CUR,x=month(m),av=avgVarOut(),dd=d=>String(d).padStart(2,'0')+'/'+m.slice(5,7);
+ // entradas
+ const ent=receipts(m).map(r=>[esc(r.name),r.val,r.kind+' · dia '+dd(r.day)+(cur?(r.got?' · já recebido':' · ainda vai entrar'):''),r.val<0?'neg':'pos']);
+ const a=scnAdj(sc,m);if(a[0])ent.push(['Cenário simulado',a[0],'renda a mais/menos ou dinheiro extra da simulação',a[0]<0?'neg':'pos']);
+ // saídas
+ const fix=S.rec.filter(r=>r.type==='out'&&recActive(r,m)).map(r=>{const c=cardById(r.cardId);return [esc(r.desc),num(r.val),'conta fixa · dia '+dd(r.day||1)+(c?' · no cartão '+esc(c.name):'')+(cur&&(S.paid||{})[m+':'+(c?'card:'+c.id:'rec:'+r.id)]?' · paga':'')]});
+ extraOut(m).forEach(r=>fix.push([esc(r.name),r.val,r.kind]));
+ const par=S.inst.filter(i=>instInMonth(i,m)).map(i=>{const c=cardById(i.cardId);return [esc(i.desc)+' ('+(diffM(i.first,m)+1)+'/'+i.n+')',instParcel(i),'parcela · dia '+dd(i.day||10)+(c?' · no cartão '+esc(c.name):'')]});
+ const lanc=S.tx.filter(t=>t.type==='out'&&t.date&&txCashMonth(t)===m).map(t=>{const c=cardById(t.cardId);return [esc(t.desc),num(t.val),(isDizTx(t)?'dízimo/oferta já devolvido':isGoalTx(t)?'guardado em meta':'gasto lançado')+' em '+t.date.slice(8,10)+'/'+t.date.slice(5,7)+(c&&t.date.slice(0,7)!==m?' · cartão, cai na fatura deste mês':'')]});
+ const dia=[];const vp=sc?1+num(sc.varPct)/100:1;
+ if(cur){const vr=varRestOf();if(vr>0)dia.push(['Estimativa do que ainda vai gastar no dia a dia',vr,'média dos últimos 3 meses ('+R0(av)+') − o que já lançou neste mês ('+R0(x.outDia)+')'])}
+ else{const v=Math.max(x.outDia,av)*vp,est=v-x.outDia;if(est>0.005)dia.push(['Estimativa de gastos do dia a dia',est,(av>0?'média dos seus gastos avulsos dos últimos 3 meses completos: '+R0(av):'nenhum gasto avulso nos últimos meses')+(x.outDia?' (já lançado para este mês: '+R0(x.outDia)+')':'')+(sc&&num(sc.varPct)?' · cenário '+(num(sc.varPct)>0?'+':'')+num(sc.varPct)+'%':'')])}
+ const diz=[];if(S.titheProj!==false){const t=titheCalc(m);t.rows.filter(r=>r.inc).forEach(r=>{const pago=cur&&r.paid;if(!pago){if(r.d>0)diz.push(['Dízimo · '+esc(r.desc),r.d,'10% de '+R0(r.val)]);if(r.o>0)diz.push(['Oferta · '+esc(r.desc),r.o,R0(r.o)+' de oferta sobre '+R0(r.val)])}});
+  t.ex.filter(e=>!(cur&&e.paid)).forEach(e=>diz.push(['Oferta especial · '+esc(e.name),num(e.val),'cadastrada em Dízimos']));
+  if(!cur&&a[0]>0)diz.push(['Dízimo/oferta da renda simulada',a[0]*(0.1+num(tithe().offer)/100),'sobre o valor simulado'])}
+ if(a[1])lanc.push(['Cenário simulado',a[1],'compra/gasto da simulação']);
+ const sumE=ent.reduce((s,x)=>s+x[1],0),sumS=[fix,par,lanc,dia,diz].reduce((s,l)=>s+l.reduce((q,x)=>q+x[1],0),0);
+ return '<div class="xsum"><div><small>Entra</small><b class="mono pos">'+R(sumE)+'</b></div><div><small>Sai</small><b class="mono neg">'+R(sumS)+'</b></div><div><small>Sobra</small><b class="mono '+(sumE-sumS>=0?'pos':'neg')+'">'+R(sumE-sumS)+'</b></div></div>'+
+  expGroup('💰 Entradas',ent,'pos')+expGroup('🏠 Contas fixas',fix,'neg')+expGroup('💳 Parcelas',par,'neg')+expGroup('🧾 Lançamentos que saem neste mês',lanc,'neg')+expGroup('🛒 Gastos do dia a dia (estimativa)',dia,'neg')+expGroup('🙏 Dízimo e ofertas a devolver',diz,'neg')+
+  '<p class="muted" style="font-size:12.5px;margin:10px 0 0">'+(S.titheProj===false?'Dízimo está fora da projeção.':'O dízimo é 10% de cada entrada e a oferta usa o percentual da aba Dízimos ('+num(tithe().offer)+'%). Para mudar uma entrada específica, ajuste na aba Dízimos.')+' A estimativa do dia a dia vem dos seus gastos avulsos dos últimos 3 meses completos; se não quiser, lance os gastos reais do mês.</p>';
+}
+function explainBalance(){
+ const ini=S.initial;if(!ini||!ini.month)return '<p>Você ainda não informou o <b>saldo inicial</b>. Sem ele, o app não sabe quanto você tem em conta. Vá no Painel → <b>Informar saldo inicial</b>.</p>';
+ const L=[['Saldo inicial em '+mLabel(ini.month,true),num(ini.val),'o valor que você informou']];
+ for(let k=ini.month;diffM(k,CUR)>0;k=addM(k,1)){const x=month(k);L.push(['Resultado de '+mLabel(k,true),x.saldo,'entrou '+R0(x.entradas)+' − saiu '+R0(x.saidas),x.saldo>=0?'pos':'neg'])}
+ const x=month(CUR),pi=pendingIn(CUR),po=pendingOut(CUR);
+ L.push(['Já entrou em '+mLabel(CUR,true),x.entradas-pi,'entradas do mês até hoje','pos']);
+ L.push(['Já saiu em '+mLabel(CUR,true),-(x.saidas-po),'contas pagas + gastos lançados que já saíram do caixa','neg']);
+ return expGroup('Como chegamos no saldo em conta',L)+'<div class="xhd" style="margin-top:6px"><b>Saldo em conta agora</b><b class="mono">'+R(balanceAt(CUR))+'</b></div><p class="muted" style="font-size:12.5px">Ainda falta receber '+R(pi)+' e pagar '+R(po)+' neste mês — isso aparece em <b>A pagar</b>. Marque <b>Paguei</b> quando pagar para o saldo ficar igual ao do banco.</p>';
+}
+function explainRange(to,sc){
+ const rows=projRows(to,sc);const L=[['Saldo previsto no fim de '+mLabel(CUR),rows[0].saldo,'saldo de hoje + o que falta entrar − o que falta sair neste mês']];
+ rows.slice(1).forEach(r=>L.push(['Sobra de '+mLabel(r.m,true),r.sobra,'entra '+R0(r.ent)+' − sai '+R0(r.sai)+' (toque no mês na tabela para ver os itens)',r.sobra>=0?'pos':'neg']));
+ return expGroup('Mês a mês até '+mLabel(to,true),L)+'<div class="xhd" style="margin-top:6px"><b>Saldo previsto no fim de '+mLabel(to)+'</b><b class="mono">'+R(rows[rows.length-1].saldo)+'</b></div>';
+}
+function openExplain(kind,m){
+ let t='',h='';const sc=scnOn()?SCN:null;
+ if(kind==='month'){t='Como foi calculado · '+mLabel(m,true);h=explainMonth(m,null)}
+ else if(kind==='monthSim'){t='Com o cenário simulado · '+mLabel(m,true);h=explainMonth(m,SCN)}
+ else if(kind==='bal'){t='Saldo em conta';h=explainBalance()}
+ else if(kind==='range'){t='Projeção até '+mLabel(m,true);h=explainRange(m,null)}
+ const el=document.getElementById('sheet');
+ el.innerHTML='<div class="sheet" role="dialog" aria-modal="true" aria-label="'+esc(t)+'"><div class="box xbox"><div class="hd"><h2>'+esc(t)+'</h2><button type="button" class="btn sm ghost" data-xclose aria-label="Fechar">✕</button></div>'+h+'</div></div>';
+ el.querySelector('[data-xclose]').onclick=()=>{el.innerHTML=''};el.querySelector('.sheet').addEventListener('click',e=>{if(e.target.classList.contains('sheet'))el.innerHTML=''});
+}
 /* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
 let projMonth=null;
 function scnAdj(sc,m){ // ajustes do cenário simulado para o mês m: [entra a mais, sai a mais]
@@ -616,13 +669,13 @@ function vProj(){
     '<div class="scg"><div class="sct">🎁 Dinheiro extra uma vez<small>venda, prêmio, acerto</small></div><div class="scf">'+inp('inVal','Valor (R$)',SCN.inVal,'number','Ex.: 2000')+inp('inM','No mês',SCN.inM||'','month')+'</div></div>'+
    '</div><div style="display:flex;gap:8px;margin-top:10px"><button type="button" class="btn sm ghost" data-act="scnClear">Limpar cenário</button></div></details>'+
   '<div class="grid g4" style="margin:14px 0">'+
-   kpi('Saldo no fim de '+mLabel(to)+(on?' · hoje':''),R(last.saldo),rows.hasBal?'como está hoje, sem mudanças':'informe o saldo inicial para ficar exato',last.saldo>=0?'pos':'neg')+
+   kpi('<span class="xclick" data-x="range" data-m="'+to+'">Saldo no fim de '+mLabel(to)+(on?' · hoje':'')+' ⓘ</span>',R(last.saldo),rows.hasBal?'como está hoje, sem mudanças':'informe o saldo inicial para ficar exato',last.saldo>=0?'pos':'neg')+
    (on?kpi('Com o cenário simulado',R(sl.saldo),(sl.saldo-last.saldo>=0?'+ ':'− ')+R0(Math.abs(sl.saldo-last.saldo))+' em relação a hoje',sl.saldo>=0?'pos':'neg'):kpi('Entra em '+mLabel(to),R(last.ent),last.inParc?'inclui '+R0(last.inParc)+' de entradas parceladas':'salário, entradas fixas e extras','pos'))+
-   kpi('Sai em '+mLabel(to),R((on?sl:last).sai),'fixas '+R0(last.outFix)+' · parcelas '+R0(last.parc)+' · dia a dia ~'+R0(last.vari)+(last.diz?' · dízimo/oferta '+R0(last.diz):''),'neg')+
+   kpi('<span class="xclick" data-x="'+(on?'monthSim':'month')+'" data-m="'+to+'">Sai em '+mLabel(to)+' ⓘ</span>',R((on?sl:last).sai),'fixas '+R0(last.outFix)+' · parcelas '+R0(last.parc)+' · dia a dia ~'+R0(last.vari)+(last.diz?' · dízimo/oferta '+R0(last.diz):''),'neg')+
    kpi('Menor saldo no caminho',R(low.saldo),'em '+mLabel(low.m)+(low.saldo<0?' · vai ficar negativo!':''),low.saldo<0?'neg':'')+'</div>'+
   '<div style="overflow:auto;max-height:360px"><table class="ptab"><thead><tr><th>Mês</th><th>Entra</th><th>Sai</th><th>Sobra</th><th>Saldo no fim</th>'+(on?'<th>Simulado</th>':'')+'</tr></thead><tbody>'+
-   rows.map((r,i)=>'<tr'+(r.cur?' class="cur"':'')+'><td>'+mLabel(r.m)+(r.cur?' <span class="muted">(atual)</span>':'')+'</td><td class="pos">'+R0(on?srows[i].ent:r.ent)+'</td><td class="neg">'+R0(on?srows[i].sai:r.sai)+'</td><td class="'+((on?srows[i]:r).sobra>=0?'pos':'neg')+'">'+R0((on?srows[i]:r).sobra)+'</td><td class="'+(r.saldo>=0?'':'neg')+'"><b>'+R0(r.saldo)+'</b></td>'+(on?'<td class="'+(srows[i].saldo>=0?'pos':'neg')+'"><b>'+R0(srows[i].saldo)+'</b></td>':'')+'</tr>').join('')+'</tbody></table></div>'+
-  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Entra = salário, fixas, parceladas, trabalho (13º, férias, acordos) e avulsas lançadas. Sai = contas fixas + parcelas + média dos gastos do dia a dia (últimos 3 meses)'+(S.titheProj===false?'. Dízimo fora da projeção — <a href="#" data-act="togTitheProj" style="color:var(--accent)">incluir dízimo</a>. ':' + <b>dízimo e ofertas</b> (sobre todas as entradas, inclusive 13º e férias) — <a href="#" data-act="togTitheProj" style="color:var(--accent)">tirar da projeção</a>. ')+(on?'Com cenário: entradas/saídas da tabela já incluem a simulação; a coluna "Saldo no fim" é sem mudanças.':'')+'</p>'+
+   rows.map((r,i)=>'<tr data-x="'+(on?'monthSim':'month')+'" data-m="'+r.m+'" class="xclick'+(r.cur?' cur':'')+'" title="Toque para ver como foi calculado"><td>'+mLabel(r.m)+(r.cur?' <span class="muted">(atual)</span>':'')+'</td><td class="pos">'+R0(on?srows[i].ent:r.ent)+'</td><td class="neg">'+R0(on?srows[i].sai:r.sai)+'</td><td class="'+((on?srows[i]:r).sobra>=0?'pos':'neg')+'">'+R0((on?srows[i]:r).sobra)+'</td><td class="'+(r.saldo>=0?'':'neg')+'"><b>'+R0(r.saldo)+'</b></td>'+(on?'<td class="'+(srows[i].saldo>=0?'pos':'neg')+'"><b>'+R0(srows[i].saldo)+'</b></td>':'')+'</tr>').join('')+'</tbody></table></div>'+
+  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">👆 <b>Toque em qualquer mês</b> para ver de onde vem cada número. Entra = salário, fixas, parceladas, trabalho (13º, férias, acordos) e avulsas lançadas. Sai = contas fixas + parcelas + média dos gastos do dia a dia (últimos 3 meses)'+(S.titheProj===false?'. Dízimo fora da projeção — <a href="#" data-act="togTitheProj" style="color:var(--accent)">incluir dízimo</a>. ':' + <b>dízimo e ofertas</b> (sobre todas as entradas, inclusive 13º e férias) — <a href="#" data-act="togTitheProj" style="color:var(--accent)">tirar da projeção</a>. ')+(on?'Com cenário: entradas/saídas da tabela já incluem a simulação; a coluna "Saldo no fim" é sem mudanças.':'')+'</p>'+
   (nx.length?'<details class="billd" style="margin-top:14px"><summary style="cursor:pointer"><b>Previsto para entrar em '+mLabel(addM(CUR,1),true)+'</b> · <span class="mono">'+R0(nx.reduce((a,r)=>a+r.val,0))+'</span></summary><div class="items">'+nx.map(r=>'<div><span>'+String(r.day).padStart(2,'0')+' · '+esc(r.name)+' <small class="muted">'+esc(r.kind)+'</small></span><span class="mono">'+R(r.val)+'</span></div>').join('')+'</div></details>':'')+
   '</section>';
 }
@@ -651,7 +704,7 @@ function vResumo(){
  const fer=[];(S.jobs||[]).forEach(j=>{const b=jobBal(j);if(b)b.fer.filter(f=>f.dif>0.5&&(f.venc||f.dias<=120)).forEach(f=>fer.push([j.patrao||'Trabalho',f]))});
  const goals=(S.goals||[]).map(g=>[g,goalMonths(g)]);const gNext=goals.filter(g=>g[1]!=null&&g[1]>0).sort((a,b)=>a[1]-b[1])[0];
  const comp=x.inFix>0?(x.outFix+x.parc)/x.inFix:0;
- const tile=(l,v,s,cls)=>'<div class="rtile"><div class="lb">'+l+'</div><div class="vl '+(cls||'')+'">'+v+'</div><div class="sub">'+s+'</div></div>';
+ const tile=(l,v,s,cls,x,m)=>'<div class="rtile'+(x?' xclick':'')+'"'+(x?' data-x="'+x+'" data-m="'+(m||'')+'" title="Toque para ver como foi calculado"':'')+'><div class="lb">'+l+(x?' ⓘ':'')+'</div><div class="vl '+(cls||'')+'">'+v+'</div><div class="sub">'+s+'</div></div>';
  const li=(ic,t,v,cls,go)=>'<div class="rrow"'+(go?' data-go="'+go+'" role="button" tabindex="0"':'')+'><span class="ri">'+ic+'</span><span class="rt">'+t+'</span><span class="rv mono '+(cls||'')+'">'+v+'</span></div>';
  const al=[];
  if(late.length)al.push(['bad','<b>'+late.length+' conta'+(late.length>1?'s':'')+' atrasada'+(late.length>1?'s':'')+'</b> ('+R0(late.reduce((a,b)=>a+b.val,0))+'). Pague primeiro para evitar juros.','pagar']);
@@ -662,9 +715,9 @@ function vResumo(){
  const concl=bal==null?'Informe seu <b>saldo inicial</b> (botão no cartão de saldo) para eu calcular quanto você terá de verdade.':
   'Se tudo seguir como está, você fecha <b>'+mLabel(CUR,true)+'</b> com cerca de <b>'+R(fimMes)+'</b> e termina <b>'+mLabel(dec,true)+'</b> com cerca de <b>'+R(fimAno)+'</b>'+(fimAno>b0?', juntando '+R0(fimAno-b0)+' até lá.':fimAno<b0?', ou seja, '+R0(b0-fimAno)+' a menos que hoje.':'.')+(df?' Fica livre das parcelas em '+mLabel(df,true)+'.':'')+(gNext?' Sua meta <b>'+esc(gNext[0].name)+'</b> chega em '+dur(gNext[1])+'.':'');
  return '<section class="card resumo"><div class="hd"><h2>🧭 Resumo geral</h2><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip acc">cruzando todos os seus dados</span><button class="btn sm primary" data-act="goProj">🔮 Projeção e simulação</button></div></div>'+
-  '<div class="rtiles">'+tile('Hoje em conta',bal==null?'—':R(bal),bal==null?'informe o saldo inicial':'o que já entrou − o que já foi pago',bal!=null&&bal<0?'neg':'')+
-   tile('Fim de '+mLabel(CUR),R(fimMes),'+ a receber '+R0(pend)+' − a pagar '+R0(pOut)+(varRest?' − dia a dia ~'+R0(varRest):'')+(titPend?' − dízimo/oferta '+R0(titPend):''),fimMes>=0?'pos':'neg')+
-   tile('Fim de '+mLabel(dec),R(fimAno),'renda, trabalho, contas, parcelas'+(usesT?' e dízimo/ofertas ('+R0(titPend+titFut)+' até lá)':''),fimAno>=0?'pos':'neg')+'</div>'+
+  '<div class="rtiles">'+tile('Hoje em conta',bal==null?'—':R(bal),bal==null?'informe o saldo inicial':'o que já entrou − o que já foi pago',bal!=null&&bal<0?'neg':'','bal')+
+   tile('Fim de '+mLabel(CUR),R(fimMes),'+ a receber '+R0(pend)+' − a pagar '+R0(pOut)+(varRest?' − dia a dia ~'+R0(varRest):'')+(titPend?' − dízimo/oferta '+R0(titPend):''),fimMes>=0?'pos':'neg','month',CUR)+
+   tile('Fim de '+mLabel(dec),R(fimAno),'renda, trabalho, contas, parcelas'+(usesT?' e dízimo/ofertas ('+R0(titPend+titFut)+' até lá)':''),fimAno>=0?'pos':'neg','range',dec)+'</div>'+
   '<p class="rconcl">'+concl+'</p>'+
   (al.length?'<div class="ralerts">'+al.map(a=>'<div class="insight"'+(a[2]?' data-go="'+a[2]+'" style="cursor:pointer"':'')+'><span class="dot" style="background:var(--'+(a[0]==='warn'?'warn':'bad')+')"></span><div>'+a[1]+'</div></div>').join('')+'</div>':'<div class="insight"><span class="dot" style="background:var(--good)"></span><div>Nenhum alerta: contas em dia e sem saldo negativo previsto nos próximos 12 meses. 👏</div></div>')+
   '<div class="rgrid">'+
@@ -746,8 +799,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.18';
+const APP_VERSION='2.19';
 const CHANGELOG=[
+ ['2.19','12/10/2026',['Toque nos números para ver como foram calculados: meses da projeção, saldo em conta, fim do mês e fim do ano — item por item (entradas, contas, parcelas, estimativa do dia a dia, dízimo e ofertas).']],
  ['2.18','12/10/2026',['Revisão das contas: saldo em conta só desconta o que já foi pago (contas do mês não pagas ficam em "A pagar").','Compras no cartão saem do saldo no mês da fatura.','Média do dia a dia usa os 3 últimos meses completos, sem contar dízimo nem dinheiro guardado em metas (evita contar o dízimo duas vezes).','"Guardei dinheiro" na meta agora sai do saldo em conta.']],
  ['2.17','12/10/2026',['Simulador: amortização — pagar a mais por mês, uma vez ou todo ano (ex.: 13º), escolhendo diminuir o prazo ou a parcela. Mostra quando quita e quanto economiza de juros.']],
  ['2.16','12/10/2026',['Simulador: opção de dar um bem na troca (valor do bem abate do financiamento e o custo mensal dele sai da conta).']],
@@ -992,7 +1046,7 @@ function vPainel(){
  vResumo()+vProj()+
  '<div class="grid g32" style="margin-top:16px">'+
   '<section class="card hero"><div class="hero-row"><div style="min-width:0">'+(bal!=null?
-   '<div class="kpi"><div class="lb" style="display:flex;align-items:center;gap:8px">Saldo em conta <button class="btn sm ghost" data-act="eye" style="padding:2px 8px" aria-label="'+(HIDE?'Mostrar valores':'Esconder valores')+'">'+(HIDE?'🙈':'👁️')+'</button></div></div><div class="big '+(bal>=0?'':'neg')+'">'+R(bal)+'</div>'+
+   '<div class="kpi"><div class="lb" style="display:flex;align-items:center;gap:8px"><span class="xclick" data-x="bal">Saldo em conta ⓘ</span> <button class="btn sm ghost" data-act="eye" style="padding:2px 8px" aria-label="'+(HIDE?'Mostrar valores':'Esconder valores')+'">'+(HIDE?'🙈':'👁️')+'</button></div></div><div class="big '+(bal>=0?'':'neg')+'">'+R(bal)+'</div>'+
    '<div class="muted" style="margin-top:6px;font-size:14px">Resultado de '+mLabel(CUR)+' até hoje: <b class="mono '+(x.saldo-pend+pOut>=0?'pos':'neg')+'">'+(x.saldo-pend+pOut>=0?'+':'')+R(x.saldo-pend+pOut)+'</b> · Saldo inicial '+R0(S.initial.val)+' em '+mLabel(S.initial.month)+' <button class="btn sm ghost" data-act="editInit" style="padding:2px 8px">Editar</button></div>'
    :'<div class="kpi"><div class="lb">Resultado do mês</div></div><div class="big '+(x.saldo>=0?'':'neg')+'">'+R(x.saldo)+'</div>'+
    '<div style="margin-top:8px"><button class="btn sm" data-act="editInit">Informar saldo inicial</button></div>')+
@@ -2172,6 +2226,7 @@ document.addEventListener('click',e=>{
  const ar=e.target.closest('[data-as-run]');if(ar){asRun(ar.dataset.asRun);if(window.innerWidth<=900)asClose();return}
  const aa=e.target.closest('[data-as-ask]');if(aa){AS_OPEN=true;asAsk(aa.dataset.asAsk);return}
  if(e.target.closest('[data-act=asClose]')){asClose();return}
+ const xc=e.target.closest('[data-x]');if(xc&&!e.target.closest('button')){openExplain(xc.dataset.x,xc.dataset.m);return}
  const go=e.target.closest('[data-go]');if(go){e.preventDefault();if(go.dataset.lm==='next')lancMonth=addM(CUR,1);view=go.dataset.go;render();window.scrollTo(0,0);return}
  const tp=e.target.closest('[data-tip]');if(tp){tipTab=tp.dataset.tip;render();return}
  const b=e.target.closest('[data-act]');if(!b)return;
