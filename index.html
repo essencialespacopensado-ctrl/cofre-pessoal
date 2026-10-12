@@ -272,6 +272,7 @@ svg text{font-family:var(--f-mono)}
 .xgrp{border-top:1px solid var(--line);padding:10px 0}.xhd{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}.xrow{display:flex;justify-content:space-between;gap:12px;padding:5px 0 5px 10px;font-size:13.5px;border-left:2px solid var(--line)}.xrow small{display:block;color:var(--muted);font-size:12px}.xrow b{white-space:nowrap}.pos{color:var(--good)}.neg{color:var(--bad)}
 .backbtn{margin:0 0 8px -6px;padding:4px 10px;font-size:13px}
 .dupask{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:16px}.dupbox{background:var(--panel);border:1px solid var(--warn);border-radius:16px;padding:20px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)}.dupbtns{display:flex;flex-direction:column;gap:8px}.dupbtns .btn{justify-content:center;text-align:center;white-space:normal}
+@media(max-width:700px){.xrowe{grid-template-columns:48px minmax(0,1fr) auto!important}.xrowe>div:last-child{display:none}#main .hd select.projm,#main .hd input.projm{max-width:100%}}
 </style>
 </head>
 <body>
@@ -300,6 +301,7 @@ const ICONS = {
  parc:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
  metas:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
  sim:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"/>',
+ ext:'<path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h4"/>',
  dicas:'<path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V16h8v-1.3A7 7 0 0012 2z"/>',
  orc:'<path d="M12 3v9l7 4"/><circle cx="12" cy="12" r="9"/>',
  pagar:'<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14l2.5 2.5L16 12"/>',
@@ -309,7 +311,7 @@ const ICONS = {
 const APP_URL=location.origin+location.pathname.replace(/index\.html$/,'');
 ICONS.estudo='<path d="M4 4h6a3 3 0 013 3v13a2 2 0 00-2-2H4zM20 4h-6a3 3 0 00-3 3v13a2 2 0 012-2h7z"/>';
 ICONS.diz='<path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z"/>';
-const VIEWS=[['painel','Painel'],['pagar','A pagar'],['lanc','Lançamentos'],['fixas','Fixas'],['trab','Trabalho'],['orc','Orçamento'],['parc','Parcelados'],['metas','Metas'],['sim','Simulador'],['dicas','Dicas'],['diz','Dízimos'],['dev','Sugestões'],['admin','Desenvolvedor']];
+const VIEWS=[['painel','Painel'],['pagar','A pagar'],['lanc','Lançamentos'],['ext','Extrato'],['fixas','Fixas'],['trab','Trabalho'],['orc','Orçamento'],['parc','Parcelados'],['metas','Metas'],['sim','Simulador'],['dicas','Dicas'],['diz','Dízimos'],['dev','Sugestões'],['admin','Desenvolvedor']];
 ICONS.share='<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>';
 ICONS.admin='<path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4"/>';
 const BUDGET={
@@ -754,6 +756,61 @@ function migrateSalaries(){
  });
  S.migSal=1;
 }
+
+/* ===== Extrato: tudo o que aconteceu e vai acontecer, com a origem ===== */
+function srcLabel(k){k=String(k||'');
+ if(k.startsWith('rec-')||k.indexOf(':rin:')>=0)return 'Fixas › Entradas fixas';
+ if(k.startsWith('ini-')||k.indexOf(':ini:')>=0)return 'Parcelados › Entradas parceladas';
+ if(k.indexOf('job:')>=0){const id=k.split('job:')[1].split(':')[0];const j=(S.jobs||[]).find(x=>x.id===id);return 'Trabalho › '+(j?esc(jobPessoa(j))+' › '+esc(j.patrao):'renda');}
+ if(k.indexOf('clt:')>=0)return 'Trabalho › CLT';
+ if(k.indexOf('acd:')>=0)return 'Trabalho › Serviço para cliente';
+ if(k.startsWith('tx'))return 'Lançamentos (você lançou)';
+ return 'App';
+}
+let extFrom=null,extTo=null,extType='tudo',extQ='';
+function extItems(from,to){
+ const L=[];const ini=S.initial;
+ for(let m=from;diffM(m,to)>=0;m=addM(m,1)){
+  const cur=m===CUR,past=diffM(m,CUR)>0,dd=d=>m+'-'+String(Math.min(28,Math.max(1,d))).padStart(2,'0');
+  receipts(m).forEach(r=>L.push({date:r.tx?(S.tx.find(t=>'tx:'+t.id===r.key)||{}).date||dd(r.day):dd(r.day),desc:r.name,kind:r.kind,src:srcLabel(r.key),val:r.val,t:'in',
+   st:r.settled?'base':(r.got?(r.auto&&!(S.got||{})[r.key]&&!r.tx?'auto':'ok'):'prev'),go:r.key.indexOf(':ini:')>0?'parc':r.work?'trab':r.tx?'lanc':'fixas'}));
+  bills(m).forEach(b=>L.push({date:dd(b.day),desc:b.name,kind:b.kind+(b.items?' ('+b.items.length+' itens: '+b.items.map(x=>esc(x[0])).join(', ')+')':''),src:b.kind==='Conta fixa'?'Fixas › Contas fixas':b.kind.indexOf('Parcela')===0?'Parcelados › Compras':'A pagar › Cartão',val:-b.val,t:'out',
+   st:b.settled?'base':(b.paid?'ok':(diffM(m,CUR)>0?'okp':(cur&&b.day<TODAY.getDate())?'late':'prev')),go:'pagar'}));
+  S.tx.filter(t=>t.type==='out'&&t.date&&!cardById(t.cardId)&&t.date.slice(0,7)===m).forEach(t=>{const d=+t.date.slice(8,10)||1;L.push({date:t.date,desc:t.desc,kind:isDizTx(t)?'Dízimo/oferta devolvido':isGoalTx(t)?'Guardado em meta':'Gasto ('+esc(t.cat||'')+')',src:isDizTx(t)?'Dízimos (você marcou como devolvido)':isGoalTx(t)?'Metas':'Lançamentos (você lançou)',val:-num(t.val),t:isDizTx(t)?'diz':'out',st:isSettled(m,d,false)?'base':'ok',go:isDizTx(t)?'diz':'lanc'})});
+  extraOut(m).forEach(r=>L.push({date:dd(r.day),desc:r.name,kind:r.kind,src:'Trabalho › Serviço (imposto)',val:-r.val,t:'out',st:isSettled(m,r.day,false)?'base':past?'ok':'prev',go:'trab'}));
+  if(S.titheProj!==false||true){const tc=titheCalc(m);const dst=diffM(m,CUR)>0?'dzp':'dz';tc.rows.filter(r=>r.inc&&!r.paid).forEach(r=>{if(r.d>0)L.push({date:dd(28),desc:'Dízimo · '+r.desc,kind:'10% de '+R(r.val)+' = '+R(r.d)+(r.edited?' (valor editado por você)':''),src:'Calculado sobre: '+srcLabel(r.key),val:-r.d,t:'diz',st:dst,go:'diz'});if(r.o>0)L.push({date:dd(28),desc:'Oferta · '+r.desc,kind:(r.edited?'valor editado por você':num(tithe().offer)+'% de '+R(r.val))+' = '+R(r.o),src:'Calculado sobre: '+srcLabel(r.key),val:-r.o,t:'diz',st:dst,go:'diz'})});
+   tc.ex.filter(e=>!e.paid).forEach(e=>L.push({date:dd(28),desc:'Oferta especial · '+e.name,kind:'cadastrada por você em Dízimos',src:'Dízimos › Ofertas especiais',val:-num(e.val),t:'diz',st:'dz',go:'diz'}))}
+ }
+ return L.filter(x=>!(x.st==='base'&&x.src.indexOf('Lançamentos')!==0&&x.src.indexOf('Dízimos')!==0&&x.src.indexOf('Metas')!==0&&diffM(x.date.slice(0,7),(S.initial||{}).month||CUR)>0)).sort((a,b)=>a.date.localeCompare(b.date)||(b.val-a.val));
+}
+function vExt(){
+ const ini=S.initial;const start=ini&&ini.month?ini.month:addM(CUR,-2);
+ if(!extFrom)extFrom=diffM(start,CUR)>0?start:CUR;if(!extTo)extTo=addM(CUR,1);
+ let L=extItems(extFrom,extTo);
+ if(extType!=='tudo')L=L.filter(x=>extType==='in'?x.t==='in':extType==='out'?x.t==='out':x.t==='diz');
+ if(extQ)L=L.filter(x=>norm(x.desc+' '+x.kind+' '+x.src).includes(norm(extQ)));
+ // saldo corrido: começa no saldo informado; itens "já no saldo" não mudam; dízimo pendente e previstos entram como previsão
+ let bal=ini?num(ini.val):0;const iniD=ini&&ini.month?ini.month+'-'+String(num(ini.day)||0).padStart(2,'0'):'';
+ const ST={base:['','já estava no saldo informado'],okp:['good','considerado pago (mês passado)'],dzp:['warn','não marcado como devolvido'],ok:['good','realizado'],auto:['acc','contado como recebido (o dia passou)'],prev:['acc','previsto'],late:['bad','atrasado — não marcado como pago'],dz:['warn','a devolver (calculado)']};
+ const rows=L.map(x=>{if(x.st!=='base'&&x.st!=='dzp'&&x.date>iniD)bal+=x.val;const st=ST[x.st];return '<div class="row xrowe" data-go="'+x.go+'" style="cursor:pointer;grid-template-columns:62px minmax(0,1fr) auto auto"><div class="ic '+(x.val>=0?'in':'out')+'" style="font-size:11px;line-height:1.1;text-align:center">'+x.date.slice(8,10)+'/'+x.date.slice(5,7)+'<br><small>'+x.date.slice(2,4)+'</small></div>'+
+  '<div style="min-width:0"><div class="t">'+esc(x.desc)+'</div><div class="s">'+x.kind+'</div><div class="s" style="opacity:.85">📍 '+x.src+'</div></div>'+
+  '<div class="v '+(x.val>=0?'pos':'neg')+'" style="text-align:right">'+(x.val>=0?'+':'−')+R(Math.abs(x.val))+'<div class="s" style="font-weight:400"><span class="chip '+st[0]+'" style="font-size:11px">'+st[1]+'</span></div></div>'+
+  '<div class="v mono" style="text-align:right;min-width:92px'+(x.st==='base'?';opacity:.5':'')+'">'+R0(bal)+'<div class="s" style="font-weight:400">saldo</div></div></div>'}).join('');
+ const sum=t=>L.filter(x=>x.st!=='base'&&(t==='in'?x.val>0:x.val<0)).reduce((a,x)=>a+x.val,0);
+ const opt=(v,l)=>'<option value="'+v+'"'+(extType===v?' selected':'')+'>'+l+'</option>';
+ const log=(S.log||[]).slice(0,60);
+ return top('Extrato','Tudo o que entrou, saiu e vai acontecer','')+
+ '<section class="card"><div class="hd" style="flex-wrap:wrap;gap:10px"><h2>📜 Extrato</h2><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+  '<label class="muted" style="font-size:13px">De <input id="extFrom" class="projm" type="month" value="'+extFrom+'"></label><label class="muted" style="font-size:13px">até <input id="extTo" class="projm" type="month" value="'+extTo+'"></label>'+
+  '<select id="extType" class="projm">'+opt('tudo','Tudo')+opt('in','Só entradas')+opt('out','Só saídas')+opt('diz','Só dízimos e ofertas')+'</select>'+
+  '<input id="extQ" class="projm" placeholder="Buscar…" value="'+esc(extQ)+'" style="width:140px"></div></div>'+
+  (ini?'<div class="insight"><span class="dot" style="background:var(--accent)"></span><div>Ponto de partida: <b>'+R(ini.val)+'</b> em '+(ini.day?String(ini.day).padStart(2,'0')+'/'+ini.month.slice(5,7)+'/'+ini.month.slice(0,4):'início de '+mLabel(ini.month,true))+(ini.settled?' · contas e salário desse mês marcados como já resolvidos':'')+'. Itens "já estava no saldo informado" não mudam o saldo.</div></div>':'<div class="insight"><span class="dot" style="background:var(--warn)"></span><div>Informe o <b>saldo em conta</b> no Painel para o extrato mostrar o saldo correto linha a linha.</div></div>')+
+  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><span class="chip good">Entradas '+R0(sum('in'))+'</span><span class="chip bad">Saídas '+R0(-sum('out'))+'</span><span class="chip">'+L.length+' itens</span></div>'+
+  '<div class="list">'+(rows||'<div class="empty">Nada neste período.</div>')+'</div>'+
+  '<p class="muted" style="font-size:12.5px;margin:10px 0 0">📍 mostra de onde veio cada valor — toque na linha para abrir a aba de origem. Dízimo e oferta aparecem com a conta feita (10% de quanto). Os que você já devolveu aparecem como saída realizada.</p></section>'+
+ '<section class="card" style="margin-top:16px"><div class="hd"><h2>📝 Histórico do que você fez</h2><span class="muted" style="font-size:12px">últimas '+log.length+' ações</span></div><div class="list">'+
+  (log.length?log.map(l=>{const d=new Date(l.at);return '<div class="row" style="grid-template-columns:110px minmax(0,1fr)"><div class="s mono">'+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+'</div><div class="t" style="font-weight:500">'+esc(l.msg)+(l.v&&VIEW_NAMES[l.v]?' <span class="muted" style="font-size:12px">· '+VIEW_NAMES[l.v]+'</span>':'')+'</div></div>'}).join(''):'<div class="empty">A partir de agora, tudo o que você cadastrar, editar, apagar ou marcar aparece aqui.</div>')+'</div></section>';
+}
 /* projeção mês a mês: entradas previstas, saídas (fixas+parcelas+gasto médio do dia a dia) e saldo no fim de cada mês */
 let projMonth=null;
 function scnAdj(sc,m){ // ajustes do cenário simulado para o mês m: [entra a mais, sai a mais]
@@ -926,8 +983,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.25';
+const APP_VERSION='2.26';
 const CHANGELOG=[
+ ['2.26','12/10/2026',['Nova aba 📜 Extrato: tudo o que entrou, saiu e vai acontecer, com data, origem (de onde veio), situação e saldo linha a linha. Filtro por período, tipo e busca.','Dízimo mostra de onde veio e a conta (10% de quanto).','📝 Histórico do que você fez (cadastros, edições, exclusões, pagamentos).','Assistente responde "o que gastei com X" no mês, mês passado, últimos N meses ou no ano, e abre o Extrato filtrado.']],
  ['2.25','12/10/2026',['A data do saldo informado é o início do app: nada antes dela gera dízimo devido, conta atrasada ou "a receber".','Opção "neste mês já recebi e já paguei tudo": salário, contas fixas, parcelas e faturas do mês de início contam como resolvidos; só entram avulsos e combinados depois (ex.: entrada parcelada).']],
  ['2.24','12/10/2026',['Saldo em conta: agora você informa o saldo de HOJE (com a data). O que entrou/saiu até essa data não é somado de novo — evita contar o salário duas vezes.','Toque no saldo para ver cada entrada e saída que foi contada no mês, e quais entraram automaticamente porque o dia já passou.']],
  ['2.23','12/10/2026',['Trabalho: 👥 Pessoas da família — adicionar, renomear e excluir pessoas; escolher a pessoa numa lista ao cadastrar a renda.']],
@@ -1001,7 +1059,7 @@ function persist(){
   catch(e){setSync('local');toast('Não salvou na nuvem agora. Ficou salvo neste aparelho.')}
  },700);
 }
-function commit(msg){persist();render();if(msg)toast(msg)}
+function commit(msg){if(msg){S.log=S.log||[];S.log.unshift({at:Date.now(),v:view,msg:String(msg)});if(S.log.length>400)S.log.length=400}persist();render();if(msg)toast(msg)}
 let AUTH=null, UNSUBS=[], authMode='login', LOCAL_ONLY=false, pendingTerms=false, pendingName='', authBusy=false;
 const DEV_EMAILS=((window.COFRE_DEV_EMAILS)||[]).map(x=>String(x).toLowerCase());
 function sub(f){UNSUBS.push(f)}
@@ -1143,7 +1201,7 @@ function buildNav(){
  setSync(syncState);
 }
 let NAV_HIST=[],NAV_LAST=null,NAV_BACK=false;
-const VIEW_NAMES={painel:'Painel',pagar:'A pagar',lanc:'Lançamentos',fixas:'Fixas',trab:'Trabalho',orc:'Orçamento',parc:'Parcelados',metas:'Metas',sim:'Simulador',dicas:'Dicas',diz:'Dízimos',dev:'Sugestões',admin:'Desenvolvedor',cats:'Categorias'};
+const VIEW_NAMES={ext:'Extrato',painel:'Painel',pagar:'A pagar',lanc:'Lançamentos',fixas:'Fixas',trab:'Trabalho',orc:'Orçamento',parc:'Parcelados',metas:'Metas',sim:'Simulador',dicas:'Dicas',diz:'Dízimos',dev:'Sugestões',admin:'Desenvolvedor',cats:'Categorias'};
 function goBack(){
  const sh=document.getElementById('sheet');if(sh&&sh.innerHTML){sh.innerHTML='';return true}
  if(!NAV_HIST.length)return false;view=NAV_HIST.pop();NAV_BACK=true;render();window.scrollTo(0,0);return true;
@@ -1161,7 +1219,7 @@ function render(){
  if(NAV_LAST&&NAV_LAST!==view&&!NAV_BACK){NAV_HIST.push(NAV_LAST);if(NAV_HIST.length>30)NAV_HIST.shift();try{history.pushState({cofreView:view},'')}catch(e){}}
  NAV_BACK=false;NAV_LAST=view;
  buildNav();
- const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,trab:vTrab,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
+ const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,trab:vTrab,ext:vExt,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
  const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+eyeBtn()+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+asBar()+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
@@ -1482,6 +1540,7 @@ const AS_ACTIONS={
 };
 // [palavras-chave, resposta, botões [rótulo, ação|view]]
 const AS_KB=[
+ [['extrato','historico','registro','de onde veio','de onde vem','o que aconteceu','movimentacao','movimentacoes'],'O <b>📜 Extrato</b> mostra tudo o que entrou, saiu e vai acontecer, com a origem de cada valor (inclusive como o dízimo foi calculado) e o histórico do que você fez.',[['Abrir Extrato','v:ext']]],
  [['projecao','projetar','simular','simulacao','cenario','como vou estar','como estarei','vou ter em','quanto vou ter','fim do ano','daqui a'],'A <b>🔮 Projeção e simulação</b> fica no Painel, logo abaixo do Resumo geral: escolha mês e ano e mude o cenário (renda, gastos, compras) para comparar.',[['Abrir projeção','proj']]],
  [['13','decimo terceiro','13o','ferias','fgts','clt','carteira assinada','salario bruto','liquido','inss','imposto de renda','holerite'],'Na aba <b>Trabalho</b> o app calcula pela lei: salário líquido, 13º (1ª e 2ª parcela), férias + 1/3 e FGTS, e já coloca na previsão.',[['Abrir Trabalho','trab'],['Configurar CLT','clt']]],
  [['acordo informal','informal','acordo','combinado','combinei','patrao','sem carteira','prestacao de servico','prestacao de servicos','fim do ano','final do ano','gratificacao','bonus'],'O <b>acordo informal</b> (combinado com o patrão) fica em <b>Trabalho</b>: escreva o que foi combinado (quanto paga, 13º, férias, bônus) e o app projeta quanto você recebe até o fim do ano e compara com a CLT.',[['Novo acordo','acordo'],['Abrir Trabalho','trab']]],
@@ -1513,7 +1572,26 @@ const AS_KB=[
  [['painel','inicio','resumo','visao geral'],'O <b>Painel</b> mostra seu saldo, o que entrou e saiu, a previsão de 12 meses e o que falta pagar.',[['Abrir Painel','v:painel']]],
  [['usuarios','pausar usuario','excluir usuario','quem usa'],'A lista de usuários fica na aba <b>Desenvolvedor</b> (só para o desenvolvedor).',[['Abrir Desenvolvedor','v:admin']]]
 ];
+function asSpend(q){ // "o que gastei com X nos últimos 3 meses"
+ if(!/(gastei|gasto|gastos|gastamos|paguei|pagamos|despesa|saiu|sairam|comprei)/.test(q))return null;
+ const NUM={um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12};
+ let from=CUR,to=CUR,per='em '+mLabel(CUR,true);let m;
+ if((m=q.match(/ultim[oa]s? (\d+|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze) mes/))){const n=+m[1]||NUM[m[1]]||3;from=addM(CUR,-(n-1));per='nos últimos '+n+' meses ('+mLabel(from)+' a '+mLabel(CUR)+')'}
+ else if(/mes passado|ultimo mes/.test(q)){from=to=addM(CUR,-1);per='em '+mLabel(from,true)}
+ else if(/(este|esse|neste|nesse) ano|no ano/.test(q)){from=CUR.slice(0,4)+'-01';per='em '+CUR.slice(0,4)+' (até agora)'}
+ else if((m=q.match(/(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/))){const i=MESES.indexOf(m[1])+1;let y=+CUR.slice(0,4);let mm=y+'-'+String(i).padStart(2,'0');if(diffM(mm,CUR)<0)mm=(y-1)+'-'+String(i).padStart(2,'0');from=to=mm;per='em '+mLabel(mm,true)}
+ // termo: o que vem depois de "com/em/de/no/na"
+ let term='';const tm=q.match(/(?:gastei|gasto|gastos|gastamos|paguei|pagamos|despesas?|saiu|sairam|comprei)\s+(?:o que\s+)?(?:com|em|de|no|na|nos|nas|pra|para)\s+(.+)/);
+ if(tm){term=tm[1].replace(/\b(nos|nas|no|na|nesse|neste|este|esse|em|de|do|da|dos|das|durante)?\s*(ultim[oa]s?\s+\S+\s+mes(es)?|mes passado|ultimo mes|este mes|esse mes|neste mes|nesse mes|mes|este ano|esse ano|no ano|janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b.*$/,'').replace(/\b(eu|o|a|os|as|que|ate agora|so)\b/g,' ').replace(/\s+/g,' ').trim()}
+ if(/^(mes|ano|ultimos?|este|esse)$/.test(term))term='';
+ const L=extItems(from,to).filter(x=>x.val<0&&(x.st==='ok'||x.st==='okp'||(x.st==='base'&&x.src.indexOf('Lançamentos')===0))&&(!term||norm(x.desc+' '+x.kind+' '+x.src).includes(term)));
+ const tot=-L.reduce((a,x)=>a+x.val,0);
+ const top=[...L].sort((a,b)=>a.val-b.val).slice(0,6).map(x=>x.date.slice(8,10)+'/'+x.date.slice(5,7)+' · '+esc(x.desc)+' <b>'+R(-x.val)+'</b>').join('<br>');
+ const msg=L.length?'Você gastou <b>'+R(tot)+'</b>'+(term?' com <b>'+esc(term)+'</b>':'')+' '+per+' — '+L.length+(L.length>1?' itens':' item')+'.'+(top?'<br><span style="font-size:13px">'+top+(L.length>6?'<br>…':'')+'</span>':''):'Não encontrei gastos'+(term?' com <b>'+esc(term)+'</b>':'')+' '+per+'. Só aparecem gastos já lançados ou contas pagas.';
+ return [msg,[['📜 Ver no Extrato','ext:'+term+'|'+from+'|'+to]]];
+}
 function asData(q){
+ const sp=asSpend(q);if(sp)return sp;
  const has=(...w)=>w.some(x=>q.includes(x));
  const asks=has('quanto','quando','qual ','quais','tenho','sobra','sobrou','proximo','o que vence');
  if(!asks)return null;
@@ -1543,6 +1621,7 @@ function asAnswer(raw){
 function asRun(a){
  if(!a)return;
  if(a.startsWith('v:')){const v=a.slice(2);if(v==='admin'&&!ME.owner)return;goView(v);return}
+ if(a.startsWith('ext:')){const [q,f,t]=a.slice(4).split('|');extQ=q||'';extFrom=f||CUR;extTo=t||CUR;extType='tudo';goView('ext');return}
  if(a.startsWith('web:')){window.open('https://www.google.com/search?q='+encodeURIComponent(a.slice(4)),'_blank','noopener');return}
  if(AS_ACTIONS[a])AS_ACTIONS[a]();
 }
@@ -1671,7 +1750,7 @@ function vDiz(){
  const row=r=>{
   const k=esc(r.key);
   return '<div class="dzrow'+(r.inc?'':' off')+'">'+
-   '<div style="min-width:0"><div class="t">'+esc(r.desc)+'</div><div class="s">'+esc(r.cat)+' · '+(r.fixa?'fixa':'avulsa')+' · renda <b class="mono" style="color:var(--fg)">'+R(r.val)+'</b>'+(r.edited?' · <button class="linkbtn" data-act="dzReset" data-k="'+k+'" style="font-size:12px">voltar ao automático</button>':'')+'</div>'+
+   '<div style="min-width:0"><div class="t">'+esc(r.desc)+'</div><div class="s">De onde veio: <b style="color:var(--fg)">'+srcLabel(r.key)+'</b> · renda <b class="mono" style="color:var(--fg)">'+R(r.val)+'</b> · dízimo 10% = '+R0(r.val*0.1)+(r.o?' · oferta '+R0(r.o):'')+(r.edited?' · <button class="linkbtn" data-act="dzReset" data-k="'+k+'" style="font-size:12px">voltar ao automático</button>':'')+'</div>'+
    '<label class="chk" style="font-size:12.5px;margin-top:6px"><input type="checkbox" data-dzinc="'+k+'"'+(r.inc?' checked':'')+(r.paid?' disabled':'')+'> Incluir no dízimo</label></div>'+
    '<label class="f">Dízimo<input type="number" inputmode="decimal" min="0" step="0.01" value="'+r.d.toFixed(2)+'" data-dz="'+k+'" data-fld="d" id="dz-d-'+k+'"'+(r.inc&&!r.paid?'':' disabled')+'></label>'+
    '<label class="f">Oferta<input type="number" inputmode="decimal" min="0" step="0.01" value="'+r.o.toFixed(2)+'" data-dz="'+k+'" data-fld="o" id="dz-o-'+k+'"'+(r.inc&&!r.paid?'':' disabled')+'></label>'+
@@ -2390,6 +2469,8 @@ function find(col,id){return S[col].find(x=>x.id===id)}
 let delArm=null;
 if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname))window.__cofre={get S(){return S},set S(v){S=v},month,balanceAt,pendingIn,pendingOut,bills,avgVarOut,projRows,projSobra,titheOut,nowStatus,render,receipts,set CURx(v){}};
 document.addEventListener('change',e=>{if(e.target&&e.target.id&&e.target.id.startsWith('scn_')){SCN[e.target.id.slice(4)]=e.target.type==='month'?e.target.value:e.target.value===''?'':num(e.target.value);saveScn();const y=window.scrollY;render();window.scrollTo(0,y);const el=document.getElementById(e.target.id);return}
+ if(e.target&&['extFrom','extTo','extType'].includes(e.target.id)){if(e.target.id==='extFrom')extFrom=e.target.value||extFrom;if(e.target.id==='extTo')extTo=e.target.value||extTo;if(e.target.id==='extType')extType=e.target.value;if(diffM(extFrom,extTo)<0)extTo=extFrom;if(diffM(extFrom,extTo)>36)extTo=addM(extFrom,36);render();return}
+ if(e.target&&e.target.id==='extQ'){extQ=e.target.value;render();return}
  if(e.target&&e.target.id==='projM'&&e.target.value){projMonth=e.target.value;render();const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})}});
 document.addEventListener('click',e=>{
  const ar=e.target.closest('[data-as-run]');if(ar){asRun(ar.dataset.asRun);if(window.innerWidth<=900)asClose();return}
