@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Como usar o Cofre</title>
+<meta name="theme-color" content="#070b14">
+<link rel="icon" href="icon-192.png">
+<script>(function(){var t="dark";try{t=localStorage.getItem("cofre-tema")||"dark"}catch(e){}document.documentElement.setAttribute("data-theme",t)})();</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: manual em coluna de leitura com índice fixo à esquerda (vira menu no topo no celular) */
+:root{
+ --bg:#eef3fa;--panel:#ffffff;--panel2:#f4f7fc;--line:#d6dfee;--fg:#0d1628;--muted:#5a6a86;--accent:#0090c7;--accent2:#5b46e6;--good:#0c9d63;--warn:#c47a00;
+ --f-display:"Chakra Petch",system-ui,sans-serif;--f-body:"Manrope",system-ui,sans-serif;--f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+ --grid:rgba(0,120,180,.06);color-scheme:light}
+:root[data-theme="dark"]{--bg:#070b14;--panel:#0e1524;--panel2:#131c30;--line:#1f2b45;--fg:#e6edf8;--muted:#8393b0;--accent:#38e1ff;--accent2:#8f7bff;--good:#3ddc97;--warn:#ffb547;--grid:rgba(56,225,255,.045);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.65;
+ background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px}
+a{color:var(--accent)}
+.wrap{display:grid;grid-template-columns:250px minmax(0,1fr);gap:40px;max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 80px}
+nav.toc{position:sticky;top:20px;align-self:start;max-height:calc(100vh - 40px);overflow:auto;padding-right:6px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:20px;display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.brand i{width:28px;height:28px;border-radius:8px;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent));display:block}
+.brand small{display:block;font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.12em;font-weight:400}
+nav.toc a{display:flex;gap:10px;padding:7px 10px;border-radius:9px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14px}
+nav.toc a span{font-family:var(--f-mono);font-size:11px;color:var(--accent);min-width:20px;padding-top:2px}
+nav.toc a:hover{background:var(--panel2);color:var(--fg)}
+nav.toc a.back{color:#04101c;background:linear-gradient(135deg,var(--accent),var(--accent2));justify-content:center}
+.back{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:10px 14px;border-radius:10px;font-weight:700;color:#04101c;text-decoration:none;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+main{min-width:0;max-width:820px}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--f-display);font-size:clamp(30px,5vw,44px);line-height:1.1;margin:6px 0 12px;text-wrap:balance}
+h2{font-family:var(--f-display);font-size:26px;margin:0 0 8px;display:flex;align-items:center;gap:12px;text-wrap:balance}
+h2 .n{font-family:var(--f-mono);font-size:13px;color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:10px;padding:4px 9px}
+h3{font-size:17px;margin:20px 0 6px}
+.lead{font-size:18px;color:var(--muted);max-width:62ch}
+section{padding:34px 0;border-top:1px solid var(--line);scroll-margin-top:16px}
+section:first-of-type{border-top:0}
+p{max-width:68ch;margin:8px 0}
+ol,ul{max-width:68ch;padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+figure{margin:18px 0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+figure img{display:block;width:100%;height:auto}
+figcaption{padding:10px 14px;font-size:13.5px;color:var(--muted);border-top:1px solid var(--line)}
+.tip{border-left:3px solid var(--accent);background:var(--panel);border-radius:0 12px 12px 0;padding:12px 16px;margin:16px 0;font-size:15px;max-width:68ch}
+.tip.warn{border-left-color:var(--warn)}
+.tip b{color:var(--fg)}
+kbd,.ui{font-family:var(--f-mono);font-size:13px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 7px;white-space:nowrap}
+.duo{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
+.duo figure{margin:8px 0}
+.qa h3{margin-top:18px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.btnt{border:1px solid var(--line);background:var(--panel2);color:var(--fg);border-radius:10px;padding:7px 12px;font:600 14px var(--f-body);cursor:pointer}
+@media (max-width:860px){
+ .wrap{grid-template-columns:1fr;gap:10px}
+ nav.toc{position:static;max-height:none;display:flex;flex-wrap:wrap;gap:4px}
+ nav.toc .brand{width:100%}
+ nav.toc a{padding:5px 9px;font-size:13px;background:var(--panel2)}
+ .duo{grid-template-columns:1fr}
+}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Índice do manual">
+ <div class="brand"><i></i><div>COFRE<small>MANUAL DE USO</small></div></div>
+ <a href="#comecar"><span>01</span>Primeiros passos</a>
+ <a href="#painel"><span>02</span>Painel</a>
+ <a href="#fixas"><span>03</span>Fixas e saldo inicial</a>
+ <a href="#lanc"><span>04</span>Lançamentos</a>
+ <a href="#pagar"><span>05</span>A pagar e cartões</a>
+ <a href="#parc"><span>06</span>Parcelados</a>
+ <a href="#orc"><span>07</span>Orçamento</a>
+ <a href="#diz"><span>08</span>Dízimos e ofertas</a>
+ <a href="#metas"><span>09</span>Metas</a>
+ <a href="#sim"><span>10</span>Simulador</a>
+ <a href="#dicas"><span>11</span>Dicas</a>
+ <a href="#sug"><span>12</span>Sugestões</a>
+ <a href="#extras"><span>13</span>Tema, novidades e instalar</a>
+ <a href="#duvidas"><span>14</span>Dúvidas comuns</a>
+ <a class="back" href="./">← Voltar para o app</a>
+</nav>
+
+<main>
+<div class="top"><div class="eyebrow">Cofre · Gestão Pessoal</div><button class="btnt" id="tema" type="button">Trocar tema</button></div>
+<h1>Como usar o Cofre</h1>
+<p class="lead">Um passo a passo de cada tela, com as imagens do próprio app. Siga na ordem na primeira vez: em 10 minutos seu mês está organizado.</p>
+
+<section id="comecar">
+ <h2><span class="n">01</span>Primeiros passos</h2>
+ <h3>Criar a sua conta</h3>
+ <ol>
+  <li>Abra o link do app e toque em <span class="ui">Criar conta</span>.</li>
+  <li>Preencha nome, e-mail e senha (mínimo 6 caracteres) e repita a senha.</li>
+  <li>Marque <span class="ui">Li e estou ciente do termo de ciência</span> e toque em <span class="ui">Criar conta</span>.</li>
+ </ol>
+ <p>Esqueceu a senha? Na tela de entrar, toque em <span class="ui">Esqueci minha senha</span> e siga o link que chega no seu e-mail.</p>
+ <figure><img src="manual-termo.jpg" alt="Tela do termo de ciência com a caixa Li e estou ciente" loading="lazy" width="1280" height="820"><figcaption>O termo de ciência aparece na primeira entrada. Você pode relê-lo pelo botão Termo, no topo.</figcaption></figure>
+ <h3>Trocar os exemplos pelos seus números</h3>
+ <p>Na primeira vez o app mostra <b>dados de exemplo</b> para você ver como tudo funciona. Quando quiser começar, toque em <span class="ui">Apagar exemplos e começar</span> (o botão pede confirmação com um segundo toque).</p>
+ <div class="tip"><b>Ordem recomendada:</b> 1) Fixas (salário, renda da família e contas) → 2) Saldo inicial → 3) Cartões em A pagar → 4) Parcelados → 5) Lançamentos do dia a dia.</div>
+</section>
+
+<section id="painel">
+ <h2><span class="n">02</span>Painel</h2>
+ <p>É a sua visão geral do mês. Mostra:</p>
+ <ul>
+  <li><b>Saldo em conta</b>: saldo inicial + tudo que entrou − tudo que saiu, mês a mês.</li>
+  <li><b>% comprometido</b>: quanto da renda fixa já está preso em contas e parcelas (verde até 50%, amarelo até 70%, vermelho acima).</li>
+  <li><b>Para onde foi o dinheiro</b>: gastos do mês por categoria.</li>
+  <li><b>Próximos 12 meses</b>: barras com a sobra prevista e a linha das parcelas.</li>
+  <li><b>Falta pagar este mês</b> e o <b>Diagnóstico automático</b> com alertas e sugestões.</li>
+ </ul>
+ <figure><img src="manual-painel.jpg" alt="Painel com saldo em conta, gráfico de comprometimento e gastos por categoria" loading="lazy" width="1280" height="820"><figcaption>O botão Novo lançamento fica sempre no canto de cima.</figcaption></figure>
+</section>
+
+<section id="fixas">
+ <h2><span class="n">03</span>Fixas e saldo inicial</h2>
+ <p>Aqui ficam as coisas que se repetem todo mês. O app usa esses valores para prever o futuro.</p>
+ <ol>
+  <li>Toque em <span class="ui">Nova recorrente</span>.</li>
+  <li>Escolha <b>Entrada</b> (salário, renda da família, app, aluguel recebido…) ou <b>Gasto</b> (aluguel, luz, internet…).</li>
+  <li>Informe valor, dia do mês e categoria. Para contas, preencha <b>Pagar para</b> (ex.: Celesc) e, se cair no cartão, escolha o cartão.</li>
+ </ol>
+ <div class="tip">Use a categoria <b>Renda da família</b> para o salário do cônjuge. Assim o Orçamento e os Dízimos sabem separar a sua renda da renda da família.</div>
+ <h3>Saldo inicial</h3>
+ <p>No fim da aba Fixas (ou no Painel) toque em <span class="ui">Informar saldo inicial</span>: some o que você tem nas contas e na carteira e escolha o mês de início. A partir daí o Painel mostra o seu saldo real.</p>
+ <figure><img src="manual-fixas.jpg" alt="Aba Fixas com entradas fixas e contas fixas" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="lanc">
+ <h2><span class="n">04</span>Lançamentos</h2>
+ <p>Para os gastos e entradas do dia a dia que não se repetem: mercado, combustível, farmácia, um trabalho extra.</p>
+ <ol>
+  <li>Toque em <span class="ui">Novo lançamento</span>.</li>
+  <li>Escolha Entrada ou Gasto, escreva a descrição, o valor, a data e a categoria.</li>
+  <li>Se pagou no cartão de crédito, escolha o cartão: o valor vai sozinho para a fatura certa.</li>
+ </ol>
+ <div class="duo">
+  <figure><img src="manual-lanc.jpg" alt="Lista de lançamentos do mês" loading="lazy" width="1280" height="820"><figcaption>Use as setas ‹ › para ver outros meses.</figcaption></figure>
+  <figure><img src="manual-lanc-form.jpg" alt="Formulário de novo lançamento" loading="lazy" width="1280" height="820"><figcaption>Formulário de lançamento.</figcaption></figure>
+ </div>
+ <p>Para corrigir, toque em <span class="ui">Editar</span>. Para apagar, toque em <span class="ui">Excluir</span> e depois em <span class="ui">Confirmar</span>.</p>
+</section>
+
+<section id="pagar">
+ <h2><span class="n">05</span>A pagar e cartões</h2>
+ <p>Mostra tudo o que você precisa pagar no mês, em ordem de vencimento, com <b>para quem pagar</b> e o valor.</p>
+ <h3>Cadastrar um cartão</h3>
+ <ol>
+  <li>Toque em <span class="ui">+ Cartão</span>.</li>
+  <li>Informe o nome (ex.: Nubank), o <b>dia que a fatura fecha</b> e o <b>dia de pagamento</b>.</li>
+ </ol>
+ <p>Compras feitas a partir do dia de fechamento vão para a fatura do mês seguinte. O app calcula isso sozinho.</p>
+ <div class="duo">
+  <figure><img src="manual-pagar.jpg" alt="Aba A pagar com faturas e contas do mês" loading="lazy" width="1280" height="820"><figcaption>Toque numa fatura para ver as compras dentro dela.</figcaption></figure>
+  <figure><img src="manual-cartao-form.jpg" alt="Formulário de cadastro de cartão" loading="lazy" width="1280" height="820"><figcaption>Cadastro do cartão.</figcaption></figure>
+ </div>
+ <p>Quando pagar, toque em <span class="ui">Paguei</span>. Os status mostram <b>Atrasada</b>, <b>Vence em X dias</b> ou <b>Pago</b>.</p>
+</section>
+
+<section id="parc">
+ <h2><span class="n">06</span>Parcelados</h2>
+ <p>Cadastre compras parceladas para saber quanto falta e quando quita.</p>
+ <ol>
+  <li>Toque em <span class="ui">Nova compra parcelada</span>.</li>
+  <li>Informe o valor da compra, o número de parcelas, os juros ao mês (0 se for sem juros), o mês da 1ª parcela e o cartão, se for no cartão.</li>
+ </ol>
+ <p>O app mostra a parcela, os quadradinhos de parcelas pagas, quanto falta, o mês da quitação e quanto você paga de juros. No topo aparece a data em que você fica <b>livre de parcelas</b>.</p>
+ <figure><img src="manual-parc.jpg" alt="Aba Parcelados com compras, parcelas pagas e data de quitação" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="orc">
+ <h2><span class="n">07</span>Orçamento</h2>
+ <p>Mostra quanto é recomendado gastar em cada categoria, de acordo com a sua renda, e quanto você já gastou.</p>
+ <ul>
+  <li>A <b>renda base</b> soma seu salário, as extras e, se quiser, a renda da família. Use o botão <span class="ui">Calcular só com o meu salário</span> para alternar.</li>
+  <li>Cada categoria tem uma barra: <b>verde</b> dentro do recomendado, <b>amarela</b> acima de 80%, <b>vermelha listrada</b> quando passou.</li>
+  <li>Toque no <b>%</b> de uma categoria para ajustar à sua realidade. <span class="ui">Voltar ao padrão</span> restaura os valores sugeridos.</li>
+ </ul>
+ <figure><img src="manual-orc.jpg" alt="Orçamento com barras por categoria" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="diz">
+ <h2><span class="n">08</span>Dízimos e ofertas</h2>
+ <p>Calcula o dízimo e a oferta <b>de cada entrada</b> do mês: seu salário, o da esposa, renda extra, e assim por diante.</p>
+ <ol>
+  <li>Escolha a <b>oferta padrão</b> (0% a 20%) na barra ou nos botões rápidos.</li>
+  <li>Confira a lista <b>Por entrada</b>: o dízimo (10%) e a oferta já vêm calculados. Você pode mudar qualquer valor; para voltar ao cálculo, toque em <span class="ui">voltar ao automático</span>.</li>
+  <li>Desmarque <span class="ui">Incluir no dízimo</span> se alguma entrada não deve entrar.</li>
+  <li>Quando entregar, toque em <span class="ui">Devolver</span> naquela entrada (ou em <span class="ui">Marcar todas como devolvidas</span>). O valor vai para Doações e aparece no Orçamento.</li>
+ </ol>
+ <figure><img src="manual-diz.jpg" alt="Aba Dízimos com total do mês e cálculo por entrada" loading="lazy" width="1280" height="820"></figure>
+ <h3>Ofertas especiais</h3>
+ <p>Para ofertas diferentes (missões, construção, campanha, ajuda a alguém), toque em <span class="ui">+ Oferta especial</span>, informe para quê e o valor. Marque <b>Repetir todo mês</b> se for mensal.</p>
+ <figure><img src="manual-oferta-form.jpg" alt="Formulário de oferta especial" loading="lazy" width="1280" height="820"></figure>
+ <h3>Por que devolver o dízimo?</h3>
+ <p>Na parte de cima da aba, toque em <span class="ui">Por que devolver o dízimo?</span> para abrir o estudo bíblico com 9 lições. Cada lição tem textos para ler na Bíblia, reflexão e uma pergunta para conversar em família ou em grupo.</p>
+ <figure><img src="manual-estudo.jpg" alt="Estudo bíblico sobre dízimos e ofertas" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="metas">
+ <h2><span class="n">09</span>Metas</h2>
+ <p>Descubra quanto tempo leva para juntar um valor.</p>
+ <ul>
+  <li><b>Calculadora rápida</b>: digite o valor e veja em quanto tempo junta guardando a sobra prevista.</li>
+  <li><span class="ui">Nova meta</span>: dê um nome (reserva de emergência, carro…), o valor, quanto já tem e escolha entre <b>usar a sobra do mês</b> ou <b>guardar um valor fixo</b>.</li>
+  <li>Quando guardar dinheiro, toque em <span class="ui">+ Guardei dinheiro</span>.</li>
+ </ul>
+ <figure><img src="manual-metas.jpg" alt="Metas com progresso e data prevista" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="sim">
+ <h2><span class="n">10</span>Simulador</h2>
+ <p>Antes de comprar algo grande (carro, móveis, celular), preencha o preço, a entrada, as parcelas, os juros e o custo mensal extra (seguro, manutenção…). O app diz:</p>
+ <ul>
+  <li>o valor da parcela e o total pago;</li>
+  <li>quanto você paga a mais por parcelar;</li>
+  <li>quanto da renda fica comprometido e quanto sobra por mês;</li>
+  <li>em quanto tempo você juntaria para pagar à vista;</li>
+  <li>e um veredito: <b>cabe</b>, <b>dá, mas pesa</b> ou <b>não recomendado agora</b>.</li>
+ </ul>
+ <p>Se decidir comprar, toque em <span class="ui">Lançar como compra parcelada</span>.</p>
+ <figure><img src="manual-sim.jpg" alt="Simulador de compra com resultado e veredito" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="dicas">
+ <h2><span class="n">11</span>Dicas</h2>
+ <p>Orientações práticas sobre gestão do dinheiro, carro, casa, roupas e dívidas, ao lado de um diagnóstico com os seus números.</p>
+ <figure><img src="manual-dicas.jpg" alt="Aba Dicas" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="sug">
+ <h2><span class="n">12</span>Sugestões</h2>
+ <p>Tem uma ideia ou encontrou um problema? Escreva em <b>Sugestões</b>, escolha o tipo e toque em <span class="ui">Registrar</span>. A mensagem vai direto para o desenvolvedor, e você acompanha o status (Nova, Em análise, Feita) e a resposta dele.</p>
+ <figure><img src="manual-dev.jpg" alt="Aba Sugestões" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="extras">
+ <h2><span class="n">13</span>Tema, novidades e instalar</h2>
+ <ul>
+  <li><b>☀️ Claro / 🌙 Escuro</b>: troca o visual do app. A escolha fica salva no aparelho.</li>
+  <li><b>Novidades</b>: mostra o que mudou em cada versão.</li>
+  <li><b>🔄 Atualizar</b>: aparece quando sai uma versão nova. Um toque e o app recarrega atualizado.</li>
+  <li><b>Compartilhar / Instalar</b>: copia o link do app e mostra como instalar no Android, iPhone e Windows.</li>
+ </ul>
+ <div class="duo">
+  <figure><img src="manual-instalar.jpg" alt="Janela de compartilhar e instalar" loading="lazy" width="1280" height="820"><figcaption>Compartilhar e instalar.</figcaption></figure>
+  <figure><img src="manual-celular.jpg" alt="App aberto no celular" loading="lazy" width="780" height="1560"><figcaption>No celular, o menu fica embaixo.</figcaption></figure>
+ </div>
+ <figure><img src="manual-novidades.jpg" alt="Janela de novidades com as versões do app" loading="lazy" width="1280" height="820"></figure>
+</section>
+
+<section id="duvidas" class="qa">
+ <h2><span class="n">14</span>Dúvidas comuns</h2>
+ <h3>Outras pessoas veem os meus dados?</h3>
+ <p>Não. Cada conta só vê os próprios dados. Nem o desenvolvedor consegue ler as suas finanças.</p>
+ <h3>Posso usar no celular e no computador?</h3>
+ <p>Sim. Entre com o mesmo e-mail e senha: tudo fica salvo na nuvem e aparece nos dois.</p>
+ <h3>O rodapé mostra "Salvo neste aparelho". E agora?</h3>
+ <p>Significa que você está sem internet ou não entrou com a sua conta. Quando a conexão voltar, o app salva na nuvem (o rodapé passa a mostrar "Salvo na nuvem").</p>
+ <h3>Os números do app são exatos?</h3>
+ <p>São estimativas a partir do que você cadastra. Confira sempre com o seu banco, faturas e contratos antes de decidir.</p>
+ <div class="tip warn"><b>Importante:</b> nunca cadastre senhas, números de cartão ou de conta bancária no app. Ele não precisa disso para funcionar.</div>
+</section>
+<p><a class="back" href="./">← Voltar para o app</a></p>
+</main>
+</div>
+<script>
+document.getElementById('tema').addEventListener('click',function(){var r=document.documentElement,t=r.getAttribute('data-theme')==='light'?'dark':'light';r.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}});
+</script>
+</body>
+</html>
