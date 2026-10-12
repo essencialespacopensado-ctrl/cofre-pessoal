@@ -703,7 +703,24 @@ function dupFix(k){
 /* ===== Rendas da família: salários moram na aba Trabalho ===== */
 function jobPessoa(j){return (j.pessoa||'Eu').trim()||'Eu'}
 function jobTipo(j){return j.tipo||(j.t13==='nao'&&(!j.fer||j.fer==='nada')&&!num(j.bonus)&&!j.text?'fixo':'informal')}
-function pessoas(){const p=['Eu'];(S.jobs||[]).forEach(j=>{const x=jobPessoa(j);if(!p.includes(x))p.push(x)});return p}
+function pessoas(){S.people=S.people||[];const p=['Eu'];S.people.forEach(x=>{if(x&&!p.includes(x))p.push(x)});(S.jobs||[]).forEach(j=>{const x=jobPessoa(j);if(!p.includes(x)){p.push(x);S.people.push(x)}});return p}
+function formPerson(old){
+ openSheet(old?'Renomear pessoa':'Adicionar pessoa','<div class="form"><label class="f full">Nome<input name="desc" value="'+esc(old||'')+'" placeholder="Ex.: Esposa, Maria, Filho João"></label>'+
+  '<p class="muted full" style="margin:0;font-size:12.5px">Depois cadastre as rendas dela em <b>+ Renda / trabalho</b>.</p></div>',f=>{
+  const n=f.desc.value.trim();if(!n){toast('Digite o nome');return false}
+  const ps=pessoas();if(n!==old&&ps.includes(n)){toast('Essa pessoa já existe');return false}
+  if(old){S.people=S.people.map(x=>x===old?n:x);(S.jobs||[]).forEach(j=>{if(jobPessoa(j)===old)j.pessoa=n})}else S.people.push(n);
+  S.demo=false;commit(old?'Pessoa renomeada':'Pessoa adicionada');});
+}
+function delPerson(n){
+ const js=(S.jobs||[]).filter(j=>jobPessoa(j)===n);
+ const drop=()=>{S.people=(S.people||[]).filter(x=>x!==n)};
+ if(!js.length){dupAsk('Excluir <b>'+esc(n)+'</b> da família?',[['Excluir',()=>{drop();S.demo=false;commit('Pessoa excluída')}],['Cancelar',()=>{}]]);return}
+ dupAsk('<b>'+esc(n)+'</b> tem '+js.length+' renda(s) cadastrada(s): '+js.map(j=>esc(j.patrao)+' ('+R0(j.val)+')').join(', ')+'. O que fazer com elas?',[
+  ['Apagar a pessoa e as rendas dela',()=>{S.jobs=S.jobs.filter(j=>jobPessoa(j)!==n);drop();S.demo=false;commit('Pessoa e rendas excluídas')}],
+  ['Passar as rendas para mim (Eu) e excluir a pessoa',()=>{js.forEach(j=>j.pessoa='Eu');drop();S.demo=false;commit('Rendas passadas para você')}],
+  ['Cancelar',()=>{}]]);
+}
 function jobIncomeFor(m){const o={sal:0,fam:0};(S.jobs||[]).filter(j=>j.sal!==false&&jobActive(j,m)).forEach(j=>{const v=jobNet(j,num(j.val)+num(j.extra));if(jobPessoa(j)==='Eu')o.sal+=v;else o.fam+=v});return o}
 function migrateSalaries(){
  if(S.migSal)return;S.jobs=S.jobs||[];const T=tithe();
@@ -889,8 +906,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.22';
+const APP_VERSION='2.23';
 const CHANGELOG=[
+ ['2.23','12/10/2026',['Trabalho: 👥 Pessoas da família — adicionar, renomear e excluir pessoas; escolher a pessoa numa lista ao cadastrar a renda.']],
  ['2.22','12/10/2026',['Aba Trabalho agora reúne as rendas da família: cada pessoa com seus trabalhos (salário fixo ou acordo informal) e o total da família no topo.','Salários que estavam em Fixas foram movidos para Trabalho (sem duplicar com o acordo).']],
  ['2.21','12/10/2026',['Evita duplicados: ao salvar algo parecido com um cadastro existente (mesmo valor ou nome), o app pergunta se é o mesmo.','Salário em Fixas + acordo informal com o mesmo valor: escolha "é o mesmo" e o acordo fica só para projeção (13º, férias, bônus).','Painel avisa duplicidades que já existem, com botão Resolver.']],
  ['2.20','12/10/2026',['Botão ← Voltar no topo de cada tela (volta para a tela anterior). O voltar do celular também funciona dentro do app.']],
@@ -2172,7 +2190,11 @@ function vTrab(){
   (k?'<div class="rrow"><span class="ri">💼</span><span class="rt">CLT (líquido)</span><span class="rv mono pos">'+R0(k.mes.net)+'</span></div>':'')+
   (outras.length?'<div class="rrow" data-go="fixas"><span class="ri">🏠</span><span class="rt">Outras entradas fixas (aba Fixas)</span><span class="rv mono pos">'+R0(tOut)+'</span></div>':'')+'</div>'+
   (js.some(j=>j.sal===false)?'<div class="muted" style="font-size:12.5px;margin-top:8px">Rendas marcadas "só para projeção" não entram no total mensal.</div>':'')+'</section>';
- return top('Trabalho','Rendas da família','<button class="btn primary" data-act="addJob">+ Renda / trabalho</button>')+fam+
+ const allP=pessoas();const pcard='<section class="card" style="margin-bottom:16px"><div class="hd"><h2>👥 Pessoas da família</h2><button class="btn sm primary" data-act="addPerson">+ Adicionar pessoa</button></div><div class="list">'+
+  allP.map(p=>{const pj=js.filter(j=>jobPessoa(j)===p);const t=pj.filter(j=>j.sal!==false&&jobActive(j,CUR)).reduce((a,j)=>a+jobNet(j,num(j.val)+num(j.extra)),0);
+   return '<div class="row" style="grid-template-columns:auto minmax(0,1fr) auto auto"><div class="ic in">👤</div><div style="min-width:0"><div class="t">'+(p==='Eu'?'Eu (você)':esc(p))+'</div><div class="s">'+pj.length+' renda(s)'+(pj.length?' · '+pj.map(j=>esc(j.patrao)).join(', '):' · nenhuma renda ainda')+'</div></div><div class="v pos">'+R0(t)+'/mês</div>'+
+   '<div class="del" style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn sm" data-act="addJobFor" data-p="'+esc(p)+'">+ Renda</button>'+(p==='Eu'?'':'<button class="btn sm ghost" data-act="editPerson" data-p="'+esc(p)+'">Renomear</button><button class="btn sm ghost danger" data-act="delPerson" data-p="'+esc(p)+'">Excluir</button>')+'</div></div>'}).join('')+'</div></section>';
+ return top('Trabalho','Rendas da família','<button class="btn primary" data-act="addJob">+ Renda / trabalho</button>')+fam+pcard+
  (js.length||k?'<section class="card hero" style="margin-bottom:16px"><div class="kpi"><div class="lb">Projeção até o fim de '+y+' · do trabalho da família</div></div><div class="big">'+R(tot)+'</div><div class="muted" style="margin-top:6px;font-size:14px">É o que ainda vai entrar de '+mLabel(CUR)+' até dezembro, contando salário, 13º, férias e bônus combinados.</div><div style="margin-top:12px"><button class="btn sm" data-act="projDez">🔮 Ver como fico em dezembro</button></div></section>':'')+
  (js.length?ps.map(p=>'<h2 style="margin:18px 0 10px">👤 '+esc(p)+'</h2><div class="grid g2">'+js.filter(j=>jobPessoa(j)===p).map(jcard).join('')+'</div>').join(''):'<section class="card"><div class="empty">Nenhuma renda ainda. Toque em <b>+ Renda / trabalho</b> e cadastre o salário de cada pessoa da família.</div></section>')+
  '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Tipo <b>Salário fixo</b>: só o valor do mês. Tipo <b>Acordo informal</b>: combinado com o patrão, com 13º, férias, bônus, histórico e comparação com a CLT.</p>'+
@@ -2187,7 +2209,8 @@ function formJob(j){
  const mo=[1,2,3,4,5,6,7,8,9,10,11,12].map(i=>'<option value="'+i+'"'+(+j.bonusMonth===i?' selected':'')+'>'+mLabel(CUR.slice(0,4)+'-'+String(i).padStart(2,'0'),true).split(' ')[0]+'</option>').join('');
  const sel=(n,o,v)=>'<select name="'+n+'">'+o.map(([k,l])=>'<option value="'+k+'"'+(k===v?' selected':'')+'>'+l+'</option>').join('')+'</select>';
  openSheet(j.id?'Editar renda / trabalho':'Nova renda / trabalho','<div class="form">'+
-  '<label class="f">De quem é essa renda<input name="pessoa" list="pessoasDL" value="'+esc(jobPessoa(j))+'" placeholder="Eu, Esposa, Filho…"><datalist id="pessoasDL">'+pessoas().concat(['Esposa','Marido','Filho','Filha']).filter((v,i,a)=>a.indexOf(v)===i).map(p=>'<option value="'+esc(p)+'">').join('')+'</datalist></label>'+
+  '<label class="f">De quem é essa renda<select name="pessoa">'+pessoas().map(p=>'<option value="'+esc(p)+'"'+(p===jobPessoa(j)?' selected':'')+'>'+(p==='Eu'?'Eu (você)':esc(p))+'</option>').join('')+'<option value="__new">➕ Nova pessoa…</option></select></label>'+
+  '<label class="f" id="newPWrap" style="display:none">Nome da nova pessoa<input name="newP" placeholder="Ex.: Esposa, Maria"></label>'+
   '<label class="f">Tipo'+sel('tipo',[['fixo','Salário fixo (simples)'],['informal','Acordo informal (13º, férias, bônus, histórico)']],tp0)+'</label>'+
   '<div class="full jobadv" style="display:'+(tp0==='informal'?'contents':'none')+'">'+
   '<label class="f full">O que foi combinado (escreva do seu jeito)<textarea name="text" rows="4" placeholder="Ex.: Combinei com o pastor R$ 2.000 por mês, pago todo dia 5. Ele paga 13º proporcional em dezembro, férias em janeiro sem o 1/3 e uma gratificação de R$ 500 no Natal. Desconto de 11% de INSS.">'+esc(j.text||'')+'</textarea></label>'+
@@ -2215,12 +2238,14 @@ function formJob(j){
   '<label class="f full" style="flex-direction:row;align-items:center;gap:8px"><input name="sal" type="checkbox" style="width:auto"'+(j.sal!==false?' checked':'')+'> Colocar o pagamento mensal na previsão '+(hasSal?'<span class="muted">(desmarque se já cadastrou esse salário em Fixas)</span>':'')+'</label>'+
   '<p class="muted full" id="jobPrev" style="margin:0;font-size:13px"></p></div>',f=>{
   if(!need(f,['desc','val']))return false;
-  return saveChecked('jobs',{id:j.id||uid(),pessoa:(f.pessoa.value||'Eu').trim(),tipo:f.tipo.value,patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked,noFgts:f.noFgts.checked,dupOk:j.dupOk},'Acordo salvo');});
+  const pv=f.pessoa.value==='__new'?(f.newP.value||'').trim():f.pessoa.value;if(!pv){toast('Digite o nome da nova pessoa');f.newP.focus();return false}S.people=S.people||[];if(pv!=='Eu'&&!S.people.includes(pv))S.people.push(pv);
+  return saveChecked('jobs',{id:j.id||uid(),pessoa:pv,tipo:f.tipo.value,patrao:f.desc.value.trim(),func:f.func.value.trim(),text:f.text.value.trim(),val:num(f.val.value),day:Math.min(31,Math.max(1,Math.round(num(f.day.value)||5))),startDate:f.startDate.value||'',start:(f.startDate.value||'').slice(0,7),working:f.working.checked,endDate:f.working.checked?'':(f.endDate.value||''),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),hist:readHist(f),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value||'',bonus:num(f.bonus.value),bonusName:j.bonusName||'',bonusMonth:+f.bonusMonth.value||12,extra:num(f.extra.value),desc:num(f.pct.value),sal:f.sal.checked,noFgts:f.noFgts.checked,dupOk:j.dupOk},'Acordo salvo');});
  const f=document.getElementById('sheetForm');
  const cur=()=>({val:num(f.val.value),day:num(f.day.value),start:(f.startDate.value||'').slice(0,7),end:f.working.checked?'':(f.endDate.value||'').slice(0,7),t13:f.t13.value,t13Split:f.t13Split.checked,fer:f.fer.value,ferMonth:f.ferMonth.value,bonus:num(f.bonus.value),bonusMonth:+f.bonusMonth.value,bonusName:j.bonusName,extra:num(f.extra.value),desc:num(f.pct.value),sal:true,patrao:f.desc.value});
  const prev=()=>{const x=cur();if(!x.val){document.getElementById('jobPrev').innerHTML='Informe quanto recebe por mês.';return}const y=+CUR.slice(0,4);const r=jobYear(x,CUR,y+'-12',true);const c=jobVsClt(x,y);
   document.getElementById('jobPrev').innerHTML='Até dezembro: <b class="mono">'+R(r.tot)+'</b> (mensal '+R0(r.sal)+' + extras '+R0(r.ext)+') · 13º previsto: <b>'+R0(jobNet(x,job13(x,y)))+'</b>'+((c.dif13>1||c.difFer>1)?' · pela CLT seria +'+R0(c.dif13+c.difFer)+(f.noFgts.checked?'':' e FGTS '+R0(c.fgts)):'')};
  const reHist=()=>{const x={...j,startDate:f.startDate.value,working:f.working.checked,endDate:f.endDate.value,hist:readHist(f)};document.getElementById('endWrap').style.display=f.working.checked?'none':'';document.getElementById('jobHist').innerHTML=histHTML(x)};
+ f.pessoa.addEventListener('change',()=>{const nw=f.pessoa.value==='__new';document.getElementById('newPWrap').style.display=nw?'':'none';if(nw)f.newP.focus()});
  f.tipo.addEventListener('change',()=>{document.querySelectorAll('#sheetForm .jobadv').forEach(el=>el.style.display=f.tipo.value==='informal'?'contents':'none');if(f.tipo.value==='fixo'){f.t13.value='nao';f.fer.value='nada'}});
  f.startDate.addEventListener('change',reHist);f.working.addEventListener('change',reHist);f.endDate.addEventListener('change',reHist);
  f.addEventListener('input',prev);f.addEventListener('change',prev);prev();
@@ -2363,6 +2388,10 @@ document.addEventListener('click',e=>{
  else if(a==='togTitheProj'){e.preventDefault();S.titheProj=S.titheProj===false;S.demo=false;commit(S.titheProj?'Dízimo incluído nas projeções':'Dízimo fora das projeções');setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},30)}
  else if(a==='back'){if(history.state&&history.state.cofreView){history.back()}else goBack()}
  else if(a==='dupFix'){dupFix(b.dataset.k)}
+ else if(a==='addPerson')formPerson();
+ else if(a==='editPerson')formPerson(b.dataset.p);
+ else if(a==='delPerson')delPerson(b.dataset.p);
+ else if(a==='addJobFor')formJob({pessoa:b.dataset.p,tipo:'fixo',patrao:'',func:'',text:'',val:'',day:5,t13:'nao',fer:'nada',bonusMonth:12,extra:'',desc:0,sal:true});
  else if(a==='eye'){HIDE=!HIDE;try{localStorage.setItem('cofre-ocultar',HIDE?'1':'0')}catch(e){}render();toast(HIDE?'Valores escondidos':'Valores visíveis')}
  else if(a==='addInIn')formInIn();
  else if(a==='editClt')formClt();
