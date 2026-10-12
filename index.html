@@ -582,6 +582,7 @@ function scnAdj(sc,m){ // ajustes do cenário simulado para o mês m: [entra a m
  if(sc.oneM===m&&num(sc.oneVal))o+=num(sc.oneVal);
  if(num(sc.instVal)&&num(sc.instN)){const f=sc.instFrom||addM(CUR,1),k=diffM(f,m);if(k>=0&&k<num(sc.instN))o+=parcelaPrice(num(sc.instVal),num(sc.instN),num(sc.instRate))}
  if(num(sc.inVal)&&sc.inM===m)e+=num(sc.inVal);
+ if(sc.sched&&sc.sched[m])o+=sc.sched[m];
  return [e,o];
 }
 function projRows(to,sc){
@@ -743,8 +744,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.16';
+const APP_VERSION='2.17';
 const CHANGELOG=[
+ ['2.17','12/10/2026',['Simulador: amortização — pagar a mais por mês, uma vez ou todo ano (ex.: 13º), escolhendo diminuir o prazo ou a parcela. Mostra quando quita e quanto economiza de juros.']],
  ['2.16','12/10/2026',['Simulador: opção de dar um bem na troca (valor do bem abate do financiamento e o custo mensal dele sai da conta).']],
  ['2.15','12/10/2026',['Simulador explica por que o saldo fica negativo (entrada maior que o saldo, sobra menor que a parcela ou saldo inicial não informado).']],
  ['2.14','12/10/2026',['Simulador refeito: compra parcelada grande cruzando todos os seus dados — sobra e saldo com e sem a compra mês a mês, mês mais apertado, menor saldo, quando termina e gráfico comparando.','Simulador mostra o saldo do mês atual considerando tudo.']],
@@ -1718,6 +1720,14 @@ function nowStatus(){ // saldo agora e fim do mês, cruzando tudo
  const x=month(CUR),bal=balanceAt(CUR),pend=pendingIn(CUR),varRest=Math.max(0,avgVarOut()-x.outVar),diz=titheOut(CUR);
  return {bal,pend,varRest,diz,fim:(bal==null?0:bal)+pend-varRest-diz,sobra:projSobra(addM(CUR,1))};
 }
+function amortSched(fin,n,rate,first,o){ // tabela Price com amortizações extras
+ o=o||{};const r=rate/100;let bal=fin,p=parcelaPrice(fin,n,rate);const rows=[];let tp=0,ti=0;
+ for(let k=0;k<n&&bal>0.005;k++){const m=addM(first,k);const it=bal*r;let pay=Math.min(p,bal+it);bal=bal+it-pay;let ex=0;
+  if(o.on){ex+=num(o.monthly);if(o.oneM===m)ex+=num(o.one);if(num(o.yearly)&&+m.slice(5,7)===(+o.yearM||12))ex+=num(o.yearly);ex=Math.min(ex,Math.max(0,bal));bal-=ex;
+   if(ex>0&&o.mode==='parcela'&&bal>0.005)p=parcelaPrice(bal,n-k-1,rate)}
+  tp+=pay+ex;ti+=it;rows.push({m,pay,it,ex,bal:Math.max(0,bal),p})}
+ return {rows,end:rows.length?rows[rows.length-1].m:first,months:rows.length,totalPaid:tp,interest:ti,p0:parcelaPrice(fin,n,rate),pLast:rows.length?rows[rows.length-1].p:0};
+}
 let SIMV={};
 function vSim(){
  const st=nowStatus();
@@ -1741,6 +1751,15 @@ function vSim(){
   '<label class="f">1ª parcela em<input id="sFirst" type="month" value="'+esc(SIMV.sFirst!=null?SIMV.sFirst:addM(CUR,1))+'"></label>'+
   '<label class="f">Custo mensal extra (R$)<input id="sExtra" type="number" inputmode="decimal" min="0" step="50" value="'+esc(SIMV.sExtra!=null?SIMV.sExtra:'600')+'"></label>'+
   '<p class="muted full" style="margin:0;font-size:12.5px">Custo extra: seguro, IPVA, manutenção, combustível, condomínio… o que o bem gera por mês depois de comprado.</p>'+
+  '<div class="full scg" style="grid-template-columns:1fr;border-top:1px dashed var(--line);padding:10px 0 0"><label style="display:flex;align-items:center;gap:8px;font-weight:700"><input id="sAm" type="checkbox" style="width:auto"'+(SIMV.sAm?' checked':'')+'> 💰 Amortizar (pagar a mais para quitar antes)</label>'+
+   '<div id="sAmBox" class="scf" style="display:'+(SIMV.sAm?'grid':'none')+';grid-template-columns:repeat(3,minmax(0,1fr))">'+
+    '<label class="f">A mais por mês (R$)<input id="sAmMon" type="number" inputmode="decimal" min="0" step="50" value="'+esc(SIMV.sAmMon||'')+'" placeholder="Ex.: 300"></label>'+
+    '<label class="f">Valor uma vez (R$)<input id="sAmOne" type="number" inputmode="decimal" min="0" step="100" value="'+esc(SIMV.sAmOne||'')+'" placeholder="Ex.: 5000"></label>'+
+    '<label class="f">No mês<input id="sAmOneM" type="month" value="'+esc(SIMV.sAmOneM||'')+'"></label>'+
+    '<label class="f">Todo ano (R$) <small class="muted">ex.: parte do 13º</small><input id="sAmYear" type="number" inputmode="decimal" min="0" step="100" value="'+esc(SIMV.sAmYear||'')+'" placeholder="Ex.: 2000"></label>'+
+    '<label class="f">No mês de<select id="sAmYearM">'+[1,2,3,4,5,6,7,8,9,10,11,12].map(i=>'<option value="'+i+'"'+((+SIMV.sAmYearM||12)===i?' selected':'')+'>'+mLabel(CUR.slice(0,4)+'-'+String(i).padStart(2,'0'),true).split(' ')[0]+'</option>').join('')+'</select></label>'+
+    '<label class="f">O que diminuir<select id="sAmMode"><option value="prazo"'+(SIMV.sAmMode!=='parcela'?' selected':'')+'>O prazo (quita antes)</option><option value="parcela"'+(SIMV.sAmMode==='parcela'?' selected':'')+'>O valor da parcela</option></select></label>'+
+   '</div></div>'+
  '</div></section>'+
  '<section class="card"><div class="hd"><h2>Resultado</h2></div><div class="out-box" id="sOut"></div><div id="sVerdict"></div></section></div>'+
  '<section class="card" style="margin-top:16px"><div class="hd"><h2>📉 Sem a compra × com a compra</h2><div class="legend"><span><i style="background:var(--muted)"></i>Sem</span><span><i style="background:var(--accent)"></i>Com</span></div></div><div id="sChart" class="chartwrap"></div><div id="sTable" style="overflow:auto;max-height:380px;margin-top:10px"></div>'+
@@ -1749,13 +1768,17 @@ function vSim(){
 function simCalc(){
  const g=id=>num((document.getElementById(id)||{}).value),gv=id=>((document.getElementById(id)||{}).value||'');
  if(!document.getElementById('sOut'))return;
- document.querySelectorAll('#main input[id^=s]').forEach(el=>{SIMV[el.id]=el.type==='checkbox'?el.checked:el.value});
+ document.querySelectorAll('#main input[id^=s],#main select[id^=s]').forEach(el=>{SIMV[el.id]=el.type==='checkbox'?el.checked:el.value});
+ const am=!!SIMV.sAm;const ab=document.getElementById('sAmBox');if(ab)ab.style.display=am?'grid':'none';
  const tr=!!(document.getElementById('sTrade')||{}).checked;const tb=document.getElementById('sTradeBox');if(tb)tb.style.display=tr?'grid':'none';
  const price=g('sPrice'),disc=g('sDisc'),trade=tr?Math.min(g('sTradeVal'),price):0,down=Math.min(g('sDown'),Math.max(0,price-trade)),n=Math.max(1,Math.round(g('sN'))),rate=g('sRate'),extra=Math.max(0,g('sExtra')-(tr?g('sTradeCost'):0));
  const downM=gv('sDownM')||CUR,first=gv('sFirst')||addM(CUR,1);
  const fin=Math.max(0,price-down-trade),p=parcelaPrice(fin,n,rate),total=down+trade+p*n,vista=price*(1-disc/100),diff=total-vista;
- const last=addM(first,n-1),to=diffM(CUR,addM(last,3))>120?addM(CUR,120):addM(last,3);
- const sc={oneVal:down,oneM:downM,instVal:fin,instN:n,instRate:rate,instFrom:first,extra:-extra,extraFrom:first};
+ const amO={on:am,monthly:num(SIMV.sAmMon),one:num(SIMV.sAmOne),oneM:SIMV.sAmOneM||'',yearly:num(SIMV.sAmYear),yearM:+SIMV.sAmYearM||12,mode:SIMV.sAmMode||'prazo'};
+ const base=amortSched(fin,n,rate,first,{on:false}),AS=amortSched(fin,n,rate,first,amO);const amOn=am&&(amO.monthly||amO.one||amO.yearly);
+ const sched={};AS.rows.forEach(r=>sched[r.m]=(sched[r.m]||0)+r.pay+r.ex);
+ const last=amOn?AS.end:addM(first,n-1),lastOrig=addM(first,n-1),to=diffM(CUR,addM(lastOrig,3))>120?addM(CUR,120):addM(lastOrig,3);
+ const sc={oneVal:down,oneM:downM,sched,extra:-extra,extraFrom:first};const dEff=amOn?down+trade+AS.totalPaid-vista:diff;
  const A=projRows(to),B=projRows(to,sc);
  const x=month(CUR),inc=x.inFix||x.entradas,pct=inc?(p+extra)/inc:0;
  const inRange=r=>diffM(first,r.m)>=0&&diffM(r.m,last)>=0;
@@ -1767,7 +1790,9 @@ function simCalc(){
  const mVista=monthsToSave(Math.max(0,vista-down-trade),0.8);
  document.getElementById('sOut').innerHTML=
   (trade?k2('Bem na troca',R0(trade),esc(gv('sTradeDesc')||'bem dado na troca')+' · abate do valor','pos'):'')+
-  k2('Parcela',R(p),n+'x · financiando '+R0(fin)+' · '+mLabel(first)+' a '+mLabel(last))+k2('Total pago',R0(total),'à vista sairia '+R0(vista))+
+  k2('Parcela',R(p),n+'x · financiando '+R0(fin)+' · '+mLabel(first)+' a '+mLabel(lastOrig))+
+  (amOn?k2('Com amortização',amO.mode==='parcela'?'parcela → '+R0((AS.rows[Math.min(11,AS.rows.length-1)]||{}).p||0):'quita em '+mLabel(AS.end),amO.mode==='parcela'?'em 1 ano · no fim fica '+R0(AS.pLast)+' · mesmo prazo':(n-AS.months)+(n-AS.months===1?' mês':' meses')+' antes · '+AS.months+' parcelas','pos')+
+   k2('Juros economizados',R0(Math.max(0,base.interest-AS.interest)),'total pago '+R0(down+trade+AS.totalPaid)+' em vez de '+R0(total),'pos'):'')+k2('Total pago',R0(total),'à vista sairia '+R0(vista))+
   k2('Custo de parcelar',R0(diff),diff>0?Math.round(diff/vista*100)+'% a mais':'sem custo extra',diff>vista*0.25?'neg':diff>0?'wrn':'pos')+
   k2('Peso na renda',Math.round(pct*100)+'%','parcela + custo extra ('+R0(p+extra)+'/mês)'+(tr&&g('sTradeCost')?' · já tirando '+R0(g('sTradeCost'))+' do bem atual':''),pct>0.3?'neg':pct>0.15?'wrn':'pos')+
   k2('Sobra por mês · sem',R0(sobA),'média durante as parcelas',sobA<0?'neg':'pos')+
@@ -1782,7 +1807,7 @@ function simCalc(){
  if(sobB<0)why.push('A parcela + custo extra ('+R0(p+extra)+') é maior que a sua sobra (~'+R0(sobA)+')');
  const whyH=firstNeg&&why.length?'<div class="muted" style="font-size:13px;margin-top:6px"><b>Por que fica negativo:</b> '+why.join('; ')+'.</div>':'';
  if(firstNeg||sobB<0||pct>0.35){cls='bad';msg='<b>Não recomendado agora.</b> '+(firstNeg?'Seu saldo fica <b>negativo em '+mLabel(firstNeg.m,true)+'</b>. ':'')+(sobB<0?'Durante as parcelas falta, em média, '+R0(-sobB)+' por mês. ':'')+(pct>0.35?'A compra leva '+Math.round(pct*100)+'% da renda fixa. ':'')+'Diminua a entrada ou pague mais tarde, escolha algo mais barato ou junte antes.'+whyH}
- else if(pct>0.2||negM>0||diff>vista*0.3||sobB<sobA*0.35){cls='warn';msg='<b>Dá, mas pesa.</b> Sua sobra cai de '+R0(sobA)+' para '+R0(sobB)+' por mês'+(negM?' e '+negM+' mês'+(negM>1?'es':'')+' fica'+(negM>1?'m':'')+' no vermelho (o pior é '+mLabel(worst.m)+')':'')+'. '+(diff>vista*0.3?'Você paga '+R0(diff)+' só de juros. ':'')+(mVista!=null&&mVista<=n/2?'Juntando a sobra você compra à vista em '+dur(mVista)+'. ':'')}
+ else if(pct>0.2||negM>0||diff>vista*0.3||sobB<sobA*0.35){cls='warn';msg='<b>Dá, mas pesa.</b> Sua sobra cai de '+R0(sobA)+' para '+R0(sobB)+' por mês'+(negM?' e '+negM+(negM>1?' meses':' mês')+' fica'+(negM>1?'m':'')+' no vermelho (o pior é '+mLabel(worst.m)+')':'')+'. '+(dEff>vista*0.3?'Você paga '+R0(dEff)+' a mais que à vista'+(amOn?' (já com a amortização)':'')+'. ':'')+(mVista!=null&&mVista<=n/2?'Juntando a sobra você compra à vista em '+dur(mVista)+'. ':'')}
  else{cls='good';msg='<b>Cabe no orçamento.</b> Mesmo com a compra sobra cerca de '+R0(sobB)+' por mês e o saldo nunca fica negativo. '+(diff>0?'À vista você economizaria '+R0(diff)+'.':'')}
  document.getElementById('sVerdict').innerHTML='<div class="verdict '+cls+'">'+msg+'</div><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn sm" data-act="simToInst">Lançar como compra parcelada</button></div>';
  // gráfico
