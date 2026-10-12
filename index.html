@@ -270,6 +270,7 @@ svg text{font-family:var(--f-mono)}
 .xclick{cursor:pointer}.xclick:hover{color:var(--accent)}tr.xclick:hover td{background:color-mix(in srgb,var(--accent) 7%,transparent)}.rtile.xclick:hover{border-color:var(--accent)}
 .xbox{max-width:640px}.xsum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 12px}.xsum div{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px}.xsum small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.1em}.xsum b{font-size:18px}
 .xgrp{border-top:1px solid var(--line);padding:10px 0}.xhd{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}.xrow{display:flex;justify-content:space-between;gap:12px;padding:5px 0 5px 10px;font-size:13.5px;border-left:2px solid var(--line)}.xrow small{display:block;color:var(--muted);font-size:12px}.xrow b{white-space:nowrap}.pos{color:var(--good)}.neg{color:var(--bad)}
+.backbtn{margin:0 0 8px -6px;padding:4px 10px;font-size:13px}
 </style>
 </head>
 <body>
@@ -799,8 +800,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.19';
+const APP_VERSION='2.20';
 const CHANGELOG=[
+ ['2.20','12/10/2026',['Botão ← Voltar no topo de cada tela (volta para a tela anterior). O voltar do celular também funciona dentro do app.']],
  ['2.19','12/10/2026',['Toque nos números para ver como foram calculados: meses da projeção, saldo em conta, fim do mês e fim do ano — item por item (entradas, contas, parcelas, estimativa do dia a dia, dízimo e ofertas).']],
  ['2.18','12/10/2026',['Revisão das contas: saldo em conta só desconta o que já foi pago (contas do mês não pagas ficam em "A pagar").','Compras no cartão saem do saldo no mês da fatura.','Média do dia a dia usa os 3 últimos meses completos, sem contar dízimo nem dinheiro guardado em metas (evita contar o dízimo duas vezes).','"Guardei dinheiro" na meta agora sai do saldo em conta.']],
  ['2.17','12/10/2026',['Simulador: amortização — pagar a mais por mês, uma vez ou todo ano (ex.: 13º), escolhendo diminuir o prazo ou a parcela. Mostra quando quita e quanto economiza de juros.']],
@@ -1009,6 +1011,14 @@ function buildNav(){
  document.getElementById('mnav').innerHTML=guide+btns;
  setSync(syncState);
 }
+let NAV_HIST=[],NAV_LAST=null,NAV_BACK=false;
+const VIEW_NAMES={painel:'Painel',pagar:'A pagar',lanc:'Lançamentos',fixas:'Fixas',trab:'Trabalho',orc:'Orçamento',parc:'Parcelados',metas:'Metas',sim:'Simulador',dicas:'Dicas',diz:'Dízimos',dev:'Sugestões',admin:'Desenvolvedor',cats:'Categorias'};
+function goBack(){
+ const sh=document.getElementById('sheet');if(sh&&sh.innerHTML){sh.innerHTML='';return true}
+ if(!NAV_HIST.length)return false;view=NAV_HIST.pop();NAV_BACK=true;render();window.scrollTo(0,0);return true;
+}
+window.addEventListener('popstate',()=>{if(!goBack()&&view!=='painel'){view='painel';NAV_BACK=true;render()}});
+function backBtn(){return NAV_HIST.length?'<button class="btn sm ghost backbtn" data-act="back" title="Voltar">← Voltar'+(VIEW_NAMES[NAV_HIST[NAV_HIST.length-1]]?' para '+VIEW_NAMES[NAV_HIST[NAV_HIST.length-1]]:'')+'</button>':''}
 function render(){
  S.ideas=S.ideas||[];S.budget=S.budget||{};refreshCats();S.goals=S.goals||[];S.cards=S.cards||[];S.paid=S.paid||{};S.instIn=S.instIn||[];S.got=S.got||{};S.deals=S.deals||[];S.jobs=S.jobs||[];S.clt=S.clt||null;
  const main=document.getElementById('main');
@@ -1017,13 +1027,15 @@ function render(){
  if(locked){main.innerHTML=vLogin();return}
  if(!S.termsAt){main.innerHTML=vTermsGate();return}
  if(view==='admin'&&!ME.owner)view='painel';
+ if(NAV_LAST&&NAV_LAST!==view&&!NAV_BACK){NAV_HIST.push(NAV_LAST);if(NAV_HIST.length>30)NAV_HIST.shift();try{history.pushState({cofreView:view},'')}catch(e){}}
+ NAV_BACK=false;NAV_LAST=view;
  buildNav();
  const v={cats:vCats,diz:vDiz,painel:vPainel,pagar:vPagar,lanc:vLanc,fixas:vFixas,trab:vTrab,orc:vOrc,parc:vParc,metas:vMetas,sim:vSim,dicas:vDicas,dev:vDev,admin:vAdmin}[view]();
  const acct='<div class="acct">'+(ME.id?'<span class="av">'+esc((ME.name||'?').trim().slice(0,1).toUpperCase())+'</span><span>'+esc(ME.name||'Minha conta')+'</span>':'<span class="muted">Modo local</span>')+'<button class="btn sm" data-act="share">'+icon('share')+'Compartilhar / Instalar</button>'+(newVersion?'<button class="btn sm primary" data-act="doUpdate">🔄 Atualizar</button>':'')+'<a class="btn sm guidebtn" href="manual.html" style="text-decoration:none">📘 Como usar</a><button class="btn sm ghost" data-act="news">Novidades · v'+APP_VERSION+'</button>'+eyeBtn()+themeBtn()+'<button class="btn sm ghost" data-act="termo">Termo</button>'+(ME.id?'<button class="btn sm ghost" data-act="logout">Sair</button>':'')+'</div>'+(ME.devPending?'<div class="banner"><span>Para liberar a tela do <b>Desenvolvedor</b>, confirme seu e-mail pelo link que enviamos e entre de novo.</span><button class="btn sm" data-act="resendVerify">Reenviar e-mail</button></div>':'');
  main.innerHTML=acct+asBar()+(S.demo?'<div class="banner"><span><b>Você está vendo dados de exemplo.</b> Explore à vontade; quando quiser, comece com os seus números.</span><button class="btn sm" data-act="clearDemo">Apagar exemplos e começar</button></div>':'')+'<div class="view">'+v+'</div>';
  if(view==='sim')simCalc();
 }
-function top(eyebrow,title,right){return '<header class="top"><div><div class="eyebrow">'+eyebrow+'</div><h1>'+title+'</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap">'+(right||'')+'</div></header>'}
+function top(eyebrow,title,right){return '<header class="top"><div>'+backBtn()+'<div class="eyebrow">'+eyebrow+'</div><h1>'+title+'</h1></div><div style="display:flex;gap:8px;flex-wrap:wrap">'+(right||'')+'</div></header>'}
 
 /* Painel */
 function vPainel(){
@@ -2241,6 +2253,7 @@ document.addEventListener('click',e=>{
  else if(a==='projQ'){projMonth=b.dataset.v;render();setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},20)}
  else if(a==='scnClear'){SCN={};saveScn();render();setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},20);toast('Cenário limpo')}
  else if(a==='togTitheProj'){e.preventDefault();S.titheProj=S.titheProj===false;S.demo=false;commit(S.titheProj?'Dízimo incluído nas projeções':'Dízimo fora das projeções');setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},30)}
+ else if(a==='back'){if(history.state&&history.state.cofreView){history.back()}else goBack()}
  else if(a==='eye'){HIDE=!HIDE;try{localStorage.setItem('cofre-ocultar',HIDE?'1':'0')}catch(e){}render();toast(HIDE?'Valores escondidos':'Valores visíveis')}
  else if(a==='addInIn')formInIn();
  else if(a==='editClt')formClt();
