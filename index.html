@@ -703,6 +703,19 @@ function saveChecked(col,o,msg,after){
   ['Voltar e editar',()=>{}]]);
  return false;
 }
+function lowSus(v){v=num(v);return v>0&&v<100&&!Number.isInteger(v)&&Math.abs(v*1000-Math.round(v*1000))<1e-6}
+function lowWarnings(){ // valores que provavelmente foram digitados com ponto de milhar (3.500 salvo como 3,50)
+ const w=[],add=(col,id,f,v,nm)=>{if(lowSus(v))w.push({k:col+':'+id+':'+f,txt:'<b>'+esc(nm)+'</b> está com <b>'+R(num(v))+'</b>. Você quis dizer <b>'+R0(num(v)*1000)+'</b>?'})};
+ (S.jobs||[]).filter(j=>!j.lowOk).forEach(j=>{add('jobs',j.id,'val',j.val,(jobPessoa(j)!=='Eu'?jobPessoa(j)+' · ':'')+(j.patrao||'Trabalho'));add('jobs',j.id,'extra',j.extra,(j.patrao||'Trabalho')+' (extras)');add('jobs',j.id,'bonus',j.bonus,(j.patrao||'Trabalho')+' (bônus)')});
+ S.rec.filter(r=>r.type==='in'&&!r.lowOk).forEach(r=>add('rec',r.id,'val',r.val,r.desc));
+ (S.instIn||[]).filter(i=>!i.lowOk).forEach(i=>add('instIn',i.id,'total',i.total,i.desc));
+ S.inst.filter(i=>!i.lowOk).forEach(i=>add('inst',i.id,'total',i.total,i.desc));
+ S.tx.filter(t=>t.type==='in'&&!t.lowOk).forEach(t=>add('tx',t.id,'val',t.val,t.desc));
+ if(S.initial&&!S.initial.lowOk)add('initial','x','val',S.initial.val,'Saldo inicial');
+ return w;
+}
+function lowFix(k,ok){const [col,id,f]=k.split(':');const o=col==='initial'?S.initial:(S[col]||[]).find(x=>x.id===id);if(!o)return;
+ if(ok){o.lowOk=true;commit('Ok, mantido como está')}else{o[f]=Math.round(num(o[f])*1000*100)/100;commit('Corrigido para '+R0(o[f]))}}
 function dupWarnings(){ // duplicidades que já existem nos dados
  const w=[];(S.jobs||[]).filter(j=>j.sal!==false&&!j.dupOk).forEach(j=>{const r=S.rec.find(r=>r.type==='in'&&near(r.val,j.val,0.10));if(r)w.push({k:'js:'+j.id+':'+r.id,txt:'<b>'+esc(r.desc)+'</b> ('+R0(r.val)+', em Fixas) e o acordo com <b>'+esc(j.patrao)+'</b> ('+R0(j.val)+') podem ser o mesmo salário — está somando duas vezes.'})});
  {const js=(S.jobs||[]).filter(j=>j.sal!==false&&!j.dupOk);js.forEach((a,i)=>js.slice(i+1).forEach(b=>{if(jobPessoa(a)===jobPessoa(b)&&near(a.val,b.val,0.10))w.push({k:'jj:'+b.id+':'+a.id,txt:'<b>'+esc(a.patrao)+'</b> e <b>'+esc(b.patrao)+'</b> ('+R0(b.val)+') de '+esc(jobPessoa(a)==='Eu'?'você':jobPessoa(a))+' podem ser o mesmo trabalho — está somando duas vezes.'})}))}
@@ -895,8 +908,13 @@ function vProj(){
   '</section>';
 }
 /* ===== Resumo geral: cruza todos os dados ===== */
+function orcInc(m){ // renda do mês para o orçamento: TUDO que entra (salários, extras, 13º, parcelas a receber, avulsos)
+ let sal=0,fam=0;(S.jobs||[]).forEach(j=>jobItems(j,m).forEach(x=>{if(jobPessoa(j)!=='Eu')fam+=x.val;else if(x.k==='sal'||x.k==='var')sal+=x.val}));
+ S.rec.filter(r=>r.type==='in'&&recActive(r,m)).forEach(r=>{if(r.cat==='Salário')sal+=num(r.val);else if(r.cat==='Renda da família')fam+=num(r.val)});
+ const tot=month(m).entradas;return {sal,fam,ext:Math.max(0,tot-sal-fam),tot};
+}
 function budOver(m){
- const inc={sal:0,fam:0,ext:0};{const ji=jobIncomeFor(m);inc.sal+=ji.sal;inc.fam+=ji.fam}S.rec.filter(r=>r.type==='in'&&recActive(r,m)).concat(S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m)).forEach(r=>{const k=r.cat==='Salário'?'sal':r.cat==='Renda da família'?'fam':'ext';inc[k]+=num(r.val)});
+ const inc=orcInc(m);
  const base=inc.sal+inc.ext+(S.budgetFamily!==false?inc.fam:0),sp=spentByCat(m);const out=[];
  CAT_OUT.forEach(c=>{if(c==='Reserva e investimentos')return;const rec=base*budPct(c)/100,g=sp[c]||0;if(g>rec&&g>0)out.push([c,g-rec])});return out;
 }
@@ -922,6 +940,7 @@ function vResumo(){
  const tile=(l,v,s,cls,x,m)=>'<div class="rtile'+(x?' xclick':'')+'"'+(x?' data-x="'+x+'" data-m="'+(m||'')+'" title="Toque para ver como foi calculado"':'')+'><div class="lb">'+l+(x?' ⓘ':'')+'</div><div class="vl '+(cls||'')+'">'+v+'</div><div class="sub">'+s+'</div></div>';
  const li=(ic,t,v,cls,go)=>'<div class="rrow"'+(go?' data-go="'+go+'" role="button" tabindex="0"':'')+'><span class="ri">'+ic+'</span><span class="rt">'+t+'</span><span class="rv mono '+(cls||'')+'">'+v+'</span></div>';
  const al=[];
+ lowWarnings().forEach(d=>al.push(['bad','🔢 Valor suspeito: '+d.txt+' <button class="btn sm" data-act="lowFix" data-k="'+d.k+'">Corrigir</button> <button class="btn sm ghost" data-act="lowOk" data-k="'+d.k+'">Está certo</button>','']));
  dupWarnings().forEach(d=>al.push(['bad','⚠️ Possível duplicidade: '+d.txt+' <button class="btn sm" data-act="dupFix" data-k="'+d.k+'">Resolver</button>','']));
  if(late.length)al.push(['bad','<b>'+late.length+' conta'+(late.length>1?'s':'')+' atrasada'+(late.length>1?'s':'')+'</b> ('+R0(late.reduce((a,b)=>a+b.val,0))+'). Pague primeiro para evitar juros.','pagar']);
  if(neg)al.push(['bad','Pela projeção, o saldo fica <b>negativo em '+mLabel(neg.m,true)+'</b> ('+R0(neg.saldo)+'). Simule cortes ou renda extra abaixo.','']);
@@ -1015,8 +1034,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.30';
+const APP_VERSION='2.31';
 const CHANGELOG=[
+ ['2.31','12/10/2026',['Orçamento: a renda agora soma tudo que entra no mês (salário, extras, 13º, parcelas a receber, entradas avulsas). Antes faltavam algumas.','Orçamento: novo quadro de Saldo — saldo de hoje, previsto no fim do mês, renda, gastos (com dízimo) e sobra.','Painel: avisa valores que foram salvos errado por causa do ponto (ex.: salário 3.500 salvo como R$ 3,50) e corrige com um toque.']],
  ['2.30','12/10/2026',['Valores com ponto de milhar (90.000) agora são lidos certo em todo o app — antes 90.000 virava 90.','Simulador: "Juntar e pagar à vista" agora conta o dinheiro que você já tem.']],
  ['2.29','12/10/2026',['Entradas fixas editáveis em todo lugar: em Fixas cada salário/trabalho aparece com Editar e Excluir; em A pagar → A receber e nos Previstos de Lançamentos também tem Editar.']],
  ['2.28','12/10/2026',['Botão 🧹 Limpar dados no topo: apagar só os dados de exemplo (com lista para conferir) ou apagar tudo e começar do zero.']],
@@ -1437,10 +1457,18 @@ function vPagar(){
 
 /* Orçamento */
 let orcMonth=CUR;
+function orcSaldo(m,base,sp,useFam,inc){
+ const gasto=Object.values(sp).reduce((a,v)=>a+v,0),dz=diffM(CUR,m)>=0?titheOut(m):0,sobra=base-gasto-dz,cur=m===CUR,st=cur?nowStatus():null;
+ return '<section class="card" style="margin-bottom:16px"><div class="hd"><h2>💰 Saldo</h2></div><div class="grid g4">'+
+  (cur?k2('Saldo hoje',st.bal==null?'—':R0(st.bal),st.bal==null?'informe o saldo inicial no Painel':'o que tem na conta agora',st.bal!=null&&st.bal<0?'neg':'acc')+k2('Fim do mês (previsto)',R0(st.fim),'saldo + o que falta entrar − o que falta pagar − dízimo',st.fim<0?'neg':'pos'):'')+
+  k2('Renda do mês',R0(base),useFam||!inc.fam?'tudo que entra no mês':'sem a renda da família')+
+  k2('Gastos do mês',R0(gasto+dz),'contas + parcelas + lançamentos'+(dz?' + dízimo a devolver '+R0(dz):''),'neg')+
+  k2('Sobra do mês',R0(sobra),sobra<0?'gastou mais do que entrou':'renda − gastos',sobra<0?'neg':'pos')+
+ '</div></section>';
+}
 function vOrc(){
  const m=orcMonth;
- const inc={sal:0,fam:0,ext:0};{const ji=jobIncomeFor(m);inc.sal+=ji.sal;inc.fam+=ji.fam}
- S.rec.filter(r=>r.type==='in'&&recActive(r,m)).concat(S.tx.filter(t=>t.type==='in'&&t.date&&t.date.slice(0,7)===m)).forEach(r=>{const k=r.cat==='Salário'?'sal':r.cat==='Renda da família'?'fam':'ext';inc[k]+=num(r.val)});
+ const inc=orcInc(m);
  const useFam=S.budgetFamily!==false;
  const base=inc.sal+inc.ext+(useFam?inc.fam:0);
  const sp=spentByCat(m);
@@ -1459,10 +1487,11 @@ function vOrc(){
    '<div class="bnums"><span class="mono">'+R0(g)+' <span class="muted">de '+R0(rec)+'</span></span><span class="'+(cls==='bad'?'neg':cls==='warn'?'wrn':'pos')+'">'+msg+'</span></div></div></div>'}).join('');
  return top('Orçamento · '+mLabel(m,true),'Quanto gastar em cada categoria','<button class="btn sm" data-go="cats">⚙️ Categorias</button>'+'<div class="monthnav"><button class="btn sm ghost" data-act="oPrev" aria-label="Mês anterior">‹</button><span class="mono" style="min-width:64px;text-align:center">'+mLabel(m)+'</span><button class="btn sm ghost" data-act="oNext" aria-label="Próximo mês">›</button></div>')+
  '<div class="grid g32" style="margin-bottom:16px"><section class="card hero"><div class="kpi"><div class="lb">Renda base do orçamento</div></div><div class="big">'+R0(base)+'</div>'+
-  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span class="chip">Seu salário '+R0(inc.sal)+'</span><span class="chip '+(useFam?'acc':'')+'">'+(useFam?'+':'×')+' Renda da família '+R0(inc.fam)+'</span><span class="chip">+ Extras '+R0(inc.ext)+'</span></div>'+
+  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span class="chip">Seu salário '+R0(inc.sal)+'</span><span class="chip '+(useFam?'acc':'')+'">'+(useFam?'+':'×')+' Renda da família '+R0(inc.fam)+'</span><span class="chip">+ Extras, 13º e outras entradas '+R0(inc.ext)+'</span></div>'+
   '<div style="margin-top:14px"><button class="btn sm" data-act="togFam">'+(useFam?'Calcular só com o meu salário':'Somar a renda da família')+'</button></div></section>'+
  '<section class="card"><div class="kpi"><div class="lb">Situação do mês</div><div class="vl '+(overN?'neg':'pos')+'">'+(overN?overN+' categoria'+(overN>1?'s':'')+' estourada'+(overN>1?'s':''):'Tudo dentro')+'</div><div class="sub">'+(overN?'Total extrapolado: <b class="neg mono">'+R0(over)+'</b>':'Nenhuma categoria passou do recomendado.')+'</div></div>'+
   '<div class="kpi" style="margin-top:14px"><div class="lb">Soma dos percentuais</div><div class="vl '+(Math.abs(totPct-100)<0.5?'pos':'wrn')+'">'+totPct+'%</div><div class="sub">'+(Math.abs(totPct-100)<0.5?'Distribuição completa.':'Ajuste para fechar 100% da renda.')+' <button class="btn sm ghost" data-act="resetBud">Voltar ao padrão</button></div></div></section></div>'+
+ orcSaldo(m,base,sp,useFam,inc)+
  '<section class="card"><div class="hd"><h2>Categorias</h2><div class="legend"><span><i style="background:var(--good)"></i>Dentro</span><span><i style="background:var(--warn)"></i>Acima de 80%</span><span><i style="background:var(--bad)"></i>Extrapolou</span></div></div>'+
  (base?rows:'<div class="empty">Cadastre sua renda em <b>Fixas</b> (Salário e Renda da família) para ver o recomendado de cada categoria.</div>')+
  '<p class="muted" style="font-size:12.5px;margin:12px 0 0">Gasto da categoria = lançamentos + contas fixas + parcelas do mês. Toque no % para ajustar à sua realidade.</p></section>';
@@ -2530,7 +2559,7 @@ function find(col,id){return S[col].find(x=>x.id===id)}
 
 /* ---------- eventos ---------- */
 let delArm=null;
-if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname))window.__cofre={get S(){return S},set S(v){S=v},month,balanceAt,pendingIn,pendingOut,bills,avgVarOut,projRows,projSobra,titheOut,nowStatus,render,receipts,set CURx(v){}};
+if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname))window.__cofre={get S(){return S},set S(v){S=v},month,balanceAt,pendingIn,pendingOut,bills,avgVarOut,projRows,projSobra,titheOut,titheCalc,nowStatus,render,receipts,orcInc,set CURx(v){}};
 document.addEventListener('change',e=>{if(e.target&&e.target.id&&e.target.id.startsWith('scn_')){SCN[e.target.id.slice(4)]=e.target.type==='month'?e.target.value:e.target.value===''?'':num(e.target.value);saveScn();const y=window.scrollY;render();window.scrollTo(0,y);const el=document.getElementById(e.target.id);return}
  if(e.target&&['extFrom','extTo','extType'].includes(e.target.id)){if(e.target.id==='extFrom')extFrom=e.target.value||extFrom;if(e.target.id==='extTo')extTo=e.target.value||extTo;if(e.target.id==='extType')extType=e.target.value;if(diffM(extFrom,extTo)<0)extTo=extFrom;if(diffM(extFrom,extTo)>36)extTo=addM(extFrom,36);render();return}
  if(e.target&&e.target.id==='extQ'){extQ=e.target.value;render();return}
@@ -2556,6 +2585,7 @@ document.addEventListener('click',e=>{
  else if(a==='togTitheProj'){e.preventDefault();S.titheProj=S.titheProj===false;S.demo=false;commit(S.titheProj?'Dízimo incluído nas projeções':'Dízimo fora das projeções');setTimeout(()=>{const c=document.getElementById('projCard');if(c)c.scrollIntoView({block:'start'})},30)}
  else if(a==='back'){if(history.state&&history.state.cofreView){history.back()}else goBack()}
  else if(a==='dupFix'){dupFix(b.dataset.k)}
+ else if(a==='lowFix'||a==='lowOk'){lowFix(b.dataset.k,a==='lowOk')}
  else if(a==='addPerson')formPerson();
  else if(a==='editPerson')formPerson(b.dataset.p);
  else if(a==='delPerson')delPerson(b.dataset.p);
