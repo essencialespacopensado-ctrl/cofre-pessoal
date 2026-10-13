@@ -358,7 +358,7 @@ function R0(v){return HIDE?'R$ •••':fmt0.format(v||0)}
 function eyeBtn(){return '<button class="btn sm ghost" data-act="eye" title="'+(HIDE?'Mostrar valores':'Esconder valores')+'" aria-pressed="'+HIDE+'">'+(HIDE?'🙈 Mostrar saldo':'👁️ Esconder saldo')+'</button>'}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4)}
-function num(v){const n=parseFloat(v);return isFinite(n)?n:0}
+function num(v){if(typeof v==='string'){v=v.trim().replace(/\s|R\$/g,'');if(v.indexOf(',')>=0)v=v.replace(/\./g,'').replace(',','.');else if(/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(v))v=v.replace(/\./g,'')}const n=parseFloat(v);return isFinite(n)?n:0} // aceita 90.000 / 90.000,50 / 1,89
 function dur(n){if(n==null)return '—';if(n<=0)return 'já!';const a=Math.floor(n/12),m=n%12;return (a?a+(a>1?' anos':' ano'):'')+(a&&m?' e ':'')+(m?m+(m>1?' meses':' mês'):'')}
 function parcelaPrice(total,n,r){r=r/100;if(n<=0)return 0;return r>0?total*r/(1-Math.pow(1+r,-n)):total/n}
 
@@ -1015,8 +1015,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.29';
+const APP_VERSION='2.30';
 const CHANGELOG=[
+ ['2.30','12/10/2026',['Valores com ponto de milhar (90.000) agora são lidos certo em todo o app — antes 90.000 virava 90.','Simulador: "Juntar e pagar à vista" agora conta o dinheiro que você já tem.']],
  ['2.29','12/10/2026',['Entradas fixas editáveis em todo lugar: em Fixas cada salário/trabalho aparece com Editar e Excluir; em A pagar → A receber e nos Previstos de Lançamentos também tem Editar.']],
  ['2.28','12/10/2026',['Botão 🧹 Limpar dados no topo: apagar só os dados de exemplo (com lista para conferir) ou apagar tudo e começar do zero.']],
  ['2.27','12/10/2026',['Assistente por voz: toque no 🎤 e fale a pergunta. Opção 🔊 para ouvir as respostas em voz alta.']],
@@ -2137,7 +2138,7 @@ function simCalc(){
  const worst=B.reduce((a,r)=>r.sobra<a.sobra?r:a,B[0]),lowB=B.reduce((a,r)=>r.saldo<a.saldo?r:a,B[0]);
  const negM=B.filter(r=>r.sobra<0).length,firstNeg=B.find(r=>r.saldo<0);
  const endA=A.find(r=>r.m===last)||A[A.length-1],endB=B.find(r=>r.m===last)||B[B.length-1];
- const mVista=monthsToSave(Math.max(0,vista-down-trade),0.8);
+ const hoje=Math.max(0,(A[0]||{}).saldo||0),falta=Math.max(0,vista-down-trade),mVista=falta<=hoje?0:monthsToSave(falta-hoje,0.8);
  document.getElementById('sOut').innerHTML=
   (trade?k2('Bem na troca',R0(trade),esc(gv('sTradeDesc')||'bem dado na troca')+' · abate do valor','pos'):'')+
   k2('Parcela',R(p),n+'x · financiando '+R0(fin)+' · '+mLabel(first)+' a '+mLabel(lastOrig))+
@@ -2150,7 +2151,7 @@ function simCalc(){
   k2('Mês mais apertado',mLabel(worst.m),'sobra '+R0(worst.sobra)+' com a compra',worst.sobra<0?'neg':'wrn')+
   k2('Menor saldo com a compra',R0(lowB.saldo),'em '+mLabel(lowB.m)+(lowB.saldo<0?' · fica negativo!':''),lowB.saldo<0?'neg':'pos')+
   k2('Saldo ao terminar ('+mLabel(last)+')',R0(endB.saldo),'sem a compra seria '+R0(endA.saldo)+' (−'+R0(Math.max(0,endA.saldo-endB.saldo))+')','acc')+
-  k2('Juntar e pagar à vista',mVista==null?'—':dur(mVista),mVista==null?'sem sobra hoje':'guardando a sobra, rendendo 0,8% a.m.','acc');
+  k2('Juntar e pagar à vista',mVista===0?'Já dá':mVista==null?'—':dur(mVista),mVista===0?'você terá '+R0(hoje)+' este mês; à vista custa '+R0(falta):mVista==null?'sem sobra hoje':'já contando os '+R0(hoje)+' que você tem + a sobra, rendendo 0,8% a.m.',mVista===0?'pos':'acc');
  let cls,msg;const st=nowStatus(),dispDown=A.find(r=>r.m===downM);const why=[];
  if(st.bal==null)why.push('Você ainda não informou o <b>saldo inicial</b> (Painel → Informar saldo inicial), então a conta começa do zero');
  if(down&&dispDown&&down>dispDown.saldo)why.push('A <b>entrada de '+R0(down)+'</b> é maior que o que você terá em '+mLabel(downM)+' (~'+R0(Math.max(0,dispDown.saldo))+')');
