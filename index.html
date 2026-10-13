@@ -703,6 +703,12 @@ function saveChecked(col,o,msg,after){
   ['Voltar e editar',()=>{}]]);
  return false;
 }
+/* Números padronizados: qualquer jeito de digitar (90000 · 90.000 · 90.000,00 · 1,89 · 1.89) vira o mesmo valor e aparece no formato brasileiro */
+function fmtBR(v){const n=num(v);return n.toLocaleString('pt-BR',{maximumFractionDigits:2})}
+function stdNum(el){if(!el||el.dataset.num)return;el.dataset.num='1';el.type='text';el.setAttribute('inputmode','decimal');el.setAttribute('autocomplete','off');if(el.value!=='')el.value=fmtBR(el.value)}
+function stdAll(root){(root||document).querySelectorAll('input[type=number]').forEach(stdNum)}
+try{new MutationObserver(ms=>{for(const m of ms)m.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.matches&&n.matches('input[type=number]'))stdNum(n);else if(n.querySelectorAll)stdAll(n)}})}).observe(document.documentElement,{childList:true,subtree:true})}catch(e){}
+document.addEventListener('focusout',e=>{const el=e.target;if(el&&el.dataset&&el.dataset.num&&el.value.trim()!==''){const f=fmtBR(el.value);if(f!==el.value)el.value=f}},true);
 function lowSus(v){v=num(v);return v>0&&v<100&&!Number.isInteger(v)&&Math.abs(v*1000-Math.round(v*1000))<1e-6}
 function lowWarnings(){ // valores que provavelmente foram digitados com ponto de milhar (3.500 salvo como 3,50)
  const w=[],add=(col,id,f,v,nm)=>{if(lowSus(v))w.push({k:col+':'+id+':'+f,txt:'<b>'+esc(nm)+'</b> está com <b>'+R(num(v))+'</b>. Você quis dizer <b>'+R0(num(v)*1000)+'</b>?'})};
@@ -1034,8 +1040,9 @@ function setSync(s){syncState=s;document.querySelectorAll('.sync').forEach(el=>{
 function getTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark'}
 function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('cofre-tema',t)}catch(e){}const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',t==='light'?'#eef3fa':'#070b14')}
 function themeBtn(){const d=getTheme()==='dark';return '<button class="btn sm ghost" data-act="theme" title="Trocar tema" aria-label="Trocar para modo '+(d?'claro':'escuro')+'">'+(d?'☀️ Claro':'🌙 Escuro')+'</button>'}
-const APP_VERSION='2.31';
+const APP_VERSION='2.32';
 const CHANGELOG=[
+ ['2.32','12/10/2026',['Números padronizados: digite 90000, 90.000 ou 90.000,00 — dá o mesmo valor. Ponto separa milhar, vírgula separa centavos, e o campo mostra sempre no formato brasileiro.']],
  ['2.31','12/10/2026',['Orçamento: a renda agora soma tudo que entra no mês (salário, extras, 13º, parcelas a receber, entradas avulsas). Antes faltavam algumas.','Orçamento: novo quadro de Saldo — saldo de hoje, previsto no fim do mês, renda, gastos (com dízimo) e sobra.','Painel: avisa valores que foram salvos errado por causa do ponto (ex.: salário 3.500 salvo como R$ 3,50) e corrige com um toque.']],
  ['2.30','12/10/2026',['Valores com ponto de milhar (90.000) agora são lidos certo em todo o app — antes 90.000 virava 90.','Simulador: "Juntar e pagar à vista" agora conta o dinheiro que você já tem.']],
  ['2.29','12/10/2026',['Entradas fixas editáveis em todo lugar: em Fixas cada salário/trabalho aparece com Editar e Excluir; em A pagar → A receber e nos Previstos de Lançamentos também tem Editar.']],
@@ -2263,7 +2270,7 @@ function openSheet(title,body,onSave){
 }
 function closeSheet(){document.getElementById('sheet').innerHTML='';render()}
 function segType(v,cats){return '<div class="full"><div class="seg" data-val="'+v+'" '+(cats?'data-cats="1"':'')+'><button type="button" class="in" data-v="in" aria-pressed="'+(v==='in')+'">Entrada</button><button type="button" class="out" data-v="out" aria-pressed="'+(v==='out')+'">Gasto</button></div></div>'}
-function need(f,names){for(const n of names){const el=f.querySelector('[name='+n+']');if(!el.value||(el.type==='number'&&num(el.value)<=0)){el.focus();toast('Preencha: '+el.closest('label').firstChild.textContent.trim());return false}}return true}
+function need(f,names){for(const n of names){const el=f.querySelector('[name='+n+']');if(!el.value||((el.type==='number'||el.dataset.num)&&num(el.value)<=0)){el.focus();toast('Preencha: '+el.closest('label').firstChild.textContent.trim());return false}}return true}
 
 function formTx(t){
  t=t||{type:'out',desc:'',cat:'Alimentação',val:'',date:(lancMonth===CUR?ym(TODAY)+'-'+String(TODAY.getDate()).padStart(2,'0'):lancMonth+'-01'),pay:'Pix'};
